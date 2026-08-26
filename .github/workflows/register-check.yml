@@ -109,6 +109,15 @@ jobs:
       - name: Supply chain
         run: uv run register-check run --control SUP-003
 
+      # DOC-001's binary, at this locus too. The full audit below re-runs every
+      # control's own verify block, including DOC-001's
+      # `node_modules/.bin/markdownlint-cli2` — and a tool the job does not have
+      # is UNCLASSIFIED, which --require-complete promotes to a failure. That is
+      # the flag working: a run that could not verify something now says so.
+      # `npm ci` is also SUP-001's frozen node install.
+      - name: Install markdownlint
+        run: npm ci --no-audit --no-fund
+
       # docs/08-adopting.md § 4.3. Two paths, because under ADR 0022's Option 3
       # a pull request can never carry the credential: the environment's branch
       # policy names the default branch, and a pull_request run's ref is
