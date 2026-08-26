@@ -1,0 +1,1596 @@
+# The Equal Experts control register
+#
+# The single source of truth for what "conformant" means at Equal Experts.
+# Every other artefact in this repo — CI templates, gate skills, the conformance
+# checker, the devcontainer — derives from this file rather than restating it.
+#
+# Schema: docs/01-register-schema.md
+# Concepts: docs/00-concepts.md
+
+version: 0.24.0
+
+meta:
+  owner: platform-engineering
+  # Bumped when any control's `rung`, `verify`, or `variance` changes.
+  # Skills read this to decide whether a deployed artefact is stale.
+  # 2: DEV-001 gained the image-digest half of its verification (Phase 0.5
+  #    exit criterion — see docs/06-devcontainer-setup.md § Known gap).
+  # 3: The `kind:` taxonomy was corrected — eight in-process assertions were
+  #    declared `kind: command` as `register-check assert …` strings and are
+  #    now `kind: file`. `variance: justified` was removed from the vocabulary
+  #    (unimplementable as specified) and its two users are `narrowing-only`.
+  #    Verification blocks may declare themselves partial (ADR 0017).
+  # 4: DOC-001 verifies through `npx`, so package-lock.json is the authority
+  #    for its tool's version rather than four hand-kept pins.
+  # 5: DOC-001's file block verifies what its `enforces` says — the 250-char
+  #    ceiling and all three loci — where it previously asserted only that a
+  #    configuration file existed.
+  # 6: LNT-001 and TYP-001 verify through a `role:` naming a gate in the new
+  #    `stacks:` section, so the mandated tools, their config locations, their
+  #    pre-commit hooks and their editor extensions are register facts rather
+  #    than a dictionary in the checker (ADR 0018). `suppression:` moved too.
+  # 7: BLD-001 verifies its property for a devcontainer as well as a
+  #    Dockerfile, and its verify blocks narrow to the shape each can read.
+  # 8: Three rules that decided verdicts move out of the checker, and SUP-001
+  #    stops naming two stacks. `tools.<tool>.pinned_at` records the loci that
+  #    repeat a literal version, `ecosystems.<name>.frozen_install` records what
+  #    installing from the lockfile looks like, and `cloud_credentials:` records
+  #    what SEC-002 forbids — the last of these named by ADR 0018's ratified
+  #    decision and never moved. See docs/09-phase-1.5-review.md § H.
+  # 9: ADR 0019 applied to a coverage allow-list. `stacks.<stack>.source_globs`
+  #    names the tracked files a stack's gates must cover, and a gate's
+  #    `coverage_key` names where its allow-list lives — so a tracked module
+  #    outside `[tool.mypy] files`, which nothing imports, fails TYP-001 rather
+  #    than passing it silently.
+  # 10: DOC-001 invokes its tool through the path the lockfile owns rather than
+  #     through `npx`, which falls through to PATH. `tools.<tool>.invocation`
+  #     records that form for a lockfile-sourced tool, and every locus is
+  #     verified against it (ADR 0020, § H6).
+  # 11: SEC-001 is verified at both its local loci. Three were declared and one
+  #     was read — `precommit_hook_present` checked the hook and nothing read
+  #     the ci locus, so deleting the secret-scan job kept the control green.
+  #     `secrets_gate_wired_at_all_loci` subsumes the hook check and adds the
+  #     job, `provenance_stamp_present` reads back the stamp `gate-secrets`
+  #     writes, and `deployed_by` names the gate that owns those artefacts.
+  #     `tools.<tool>.release_repo` records where a literal tool's release is
+  #     fetched from — the one value `gate-secrets` needed and could not derive,
+  #     because it existed only inside a `# renovate: depName=` annotation.
+  # 12: LNT-001, TYP-001 and TST-001 name the gate that writes their artefacts.
+  #     `gate-quality` is the first gate to own more than one control, and
+  #     `deployed_by` is what makes "which gate deploys this" a register fact
+  #     rather than something read off a skill's prose. LNT-001 carries the
+  #     `provenance_stamp_present` block of its own, because the assert now
+  #     reads back the stamp of the control it is evaluating rather than any
+  #     stamp its gate wrote anywhere. A gate that deploys three controls is
+  #     where those two stop being the same statement: before this, a stamp
+  #     naming TST-001 satisfied LNT-001 and the editor locus could go
+  #     unstamped with nothing reporting it.
+  #     `stacks.<stack>.gates.<role>.invocation` now names the path that reaches
+  #     the artefact the lockfile pins rather than a bare tool name, which is
+  #     ADR 0020 applied to the quality gates: `gate-quality` writes that string
+  #     at every locus, so a bare name would deploy a locus resolving from PATH.
+  # 13: The pin a locus reaches is verified to exist. ADR 0020 measured `uv run`
+  #     reaching the artefact uv.lock pins, and falling through to PATH in one
+  #     residual case — the tool removed from the project altogether, leaving
+  #     the invocation behind (§ Applied to the quality gates, case C). That is
+  #     about the pin's *existence* rather than about the invocation, so no
+  #     spelling of `invocation` closes it. `stacks.<stack>.ecosystem` names
+  #     whose lockfile pins that stack's gate tools, `ecosystems.<name>.lock_entry`
+  #     records what a package looks like inside it, and
+  #     `stack_tool_pinned_in_lockfile` reads the two together. Every gate after
+  #     `gate-quality` inherits the answer, which is why it is settled here
+  #     rather than at the gate that first needs it.
+  # 14: The three supply-chain controls name the gate that writes their
+  #     artefacts, and SUP-003 is verified at both loci it declares. It declared
+  #     `[pre-commit, ci]` and `actions-pinned-to-sha` read neither: it reads
+  #     the *property* — every `uses:` is a SHA — from the workflow files, and a
+  #     repository with no pre-commit hook for it at all reported PASS. That is
+  #     the shape contract 11 fixed in SEC-001, found again in three more
+  #     controls, and `supply_chain_gate_wired_at_all_loci` is the same move.
+  #     `tools.register-check` records how a locus reaches the checker, because
+  #     SUP-003's pre-commit gate is the checker itself and a bare name resolves
+  #     from PATH (ADR 0020). `ecosystems.<name>.frozen_install_command` records
+  #     what a gate *writes* where `frozen_install` records what the checker
+  #     *accepts* — the schema requires each command to match one of its own
+  #     ecosystem's patterns, so a gate cannot write a step the checker will not
+  #     credit. `node.frozen_install` gained a bun pattern: `bun.lockb` was
+  #     listed as a lockfile with no idiom that installs from it, so a bun
+  #     repository could not satisfy SUP-001 by any spelling.
+  # 15: BLD-001 and DEV-001 name the gate that writes their artefacts, and both
+  #     are verified at the two loci they declare. Same finding as SUP-003 at
+  #     contract 14, in the two controls the same survey listed beside it: each
+  #     read its property out of the files on disk and neither read a locus.
+  #     `supply_chain_gate_wired_at_all_loci` is replaced by
+  #     `gate_wired_at_declared_loci`, which reads the *control's own* `locus:`
+  #     list rather than hard-coding two — three near-copies of one assert was
+  #     already one too many, and IAC-001 would have made a fourth.
+  #     BLD-001's gate at both loci is the checker, for both halves of the
+  #     control: `register-check run --control BLD-001` runs the
+  #     `kind: command` hadolint block through the same path the audit uses, so
+  #     a repository with a Dockerfile needs no second wiring for it. What such
+  #     a repository does need is a `tools.hadolint` entry of its own, naming
+  #     the loci *it* installs the linter at — an absent linter is
+  #     UNCLASSIFIED (ADR 0016) rather than a pass, and this register does not
+  #     pin one because this repository has no Dockerfile to lint.
+  # 16: IAC-001 names the gate that writes its artefacts and is verified at both
+  #     loci it declares — the last of the four the contract-14 survey listed.
+  #     Its gate is the checker, as BLD-001's is and for the same reason: the
+  #     control's two `kind: command` blocks run checkov and tflint through the
+  #     path the audit uses, so one hook enforces both without a second wiring
+  #     for either. A repository with Terraform pins those two tools in its own
+  #     register; an absent analyser is UNCLASSIFIED (ADR 0016) rather than a
+  #     pass, and this register pins neither because this repository has no
+  #     `*.tf` to analyse.
+  # 17: CI-001 names the gate that writes its artefact — and it has one, which
+  #     was not obvious. Its only locus is `remote`, so `gate-repo` was the one
+  #     gate with no file to write, no stamp to leave and nothing verifiable
+  #     until Phase 3. A gate that cannot be observed working is what this
+  #     repository's review record keeps catching, so the ruleset is *recorded*
+  #     before it is applied: `.github/rulesets/default-branch.json`, derived
+  #     from this control's `args:` at deploy time, stamped like any other
+  #     artefact, and read back by `ruleset_recorded_matches_register`.
+  #
+  #     That assert verifies **intent, not platform state**, and says so in its
+  #     own message. A recorded ruleset GitHub has never been told about is the
+  #     reads-as-solved half-state DEV-001 exists to catch, one domain over — so
+  #     the remote block stays exactly where it was, reporting SKIPPED (no
+  #     credentials) until Phase 3 implements `kind: remote`.
+  # 18: SEC-001 reads the ignore rule that keeps a fetched credential out of git
+  #     in the first place. Its other three blocks all act after the fact —
+  #     `gitleaks` reads what git already carries, push protection reads what
+  #     reached the remote — while `.gitignore` acts before a credential is ever
+  #     a git object, and nothing read it. `fetch-secrets.sh` writes real tokens
+  #     into two files on every container start, and both this repository's
+  #     `.gitignore` and the shipped template's said *SEC-001 depends on these
+  #     two lines* in a comment. A dependency stated in prose is the second copy
+  #     this register exists to prevent, one domain over.
+  #
+  #     `paths:` is the register's because which files hold fetched credentials
+  #     is a fact about a repository (ADR 0018); `.gitleaksignore` was placed
+  #     here for the same reason at contract 11. The assert also refuses a rule
+  #     git does not track — an ignore in `.git/info/exclude` or an uncommitted
+  #     `.gitignore` works on one machine and leaves the file unignored in every
+  #     clone, which is a pass that means nothing.
+  # 19: CI-001 says which checks the branch must require, and the assert reads
+  #     what the recorded rule *does* rather than that a rule of that name is
+  #     present. Both halves were broken, in opposite directions.
+  #
+  #     The record was not a payload: every rule was spelled as a bare
+  #     `{"type": ...}`, and GitHub's REST schema requires `parameters` on
+  #     `pull_request` and `required_status_checks`. `gate-repo`'s apply step
+  #     returned 422 for every adopter — a gate that could not deploy the one
+  #     control it exists for — and nothing caught it, because the assert read
+  #     rule names.
+  #
+  #     The record was also weaker than the control: a `required_status_checks`
+  #     rule naming no context requires no check, while CI-001's `enforces`
+  #     reads *at least one passing status check*. A ruleset gating nothing
+  #     satisfied `require_status_checks: true` — the contract-14 shape again,
+  #     a verdict turning on a thing being present rather than on what it does.
+  #
+  #     `required_checks:` is the register's because which checks a repository
+  #     requires is a fact about that repository (ADR 0018), and it is held to
+  #     the workflows rather than trusted: a named context must come from a job
+  #     in a gating workflow, and that job must not be suppressed. Without the
+  #     cross-check these would be a second copy of the job ids, free to drift
+  #     from the workflows that produce them.
+  # 20: `tools:` gains a third `source` — `toolchain` — and the interpreter,
+  #     which was the one tool this register pins nothing about while every
+  #     other Python tool runs inside it. Measured on 2026-08-23, the same three
+  #     files produced 3.13.15 in the devcontainer and 3.14.7 in CI, because the
+  #     only constraint written down was `requires-python = ">=3.13"` and a
+  #     floor selects nothing: uv answered with whatever each machine already
+  #     had. There was no second copy of the version to catch — there was no
+  #     copy, and two loci filled the gap independently (ADR 0027).
+  #
+  #     `toolchain` is a third value rather than a reuse because both existing
+  #     ones would be false: `literal` means the version lives here and each
+  #     locus repeats it, `lockfile` means a package manager produced the file.
+  #     A toolchain file is neither, and it behaves like a lockfile where it
+  #     counts — every locus reads it, so nothing repeats the value and the
+  #     assert checks the file is there rather than comparing copies.
+  # 21: The editor locus is verified by exclusion rather than by presence, and
+  #     the register says what is bound. `stacks.<stack>.gates.<role>` gains
+  #     `editor_binding` — a language and the setting that holds it — and
+  #     `linter-wired-at-all-loci` fails when a gated file type is held by
+  #     another extension or by nobody (ADR 0029 points 3 and 4).
+  #
+  #     Presence never excluded. `charliermarsh.ruff` was installed for the
+  #     whole time `ghcr.io/devcontainers/features/python:1` bound Python files
+  #     to `ms-python.autopep8`, and LNT-001 reported that as passing: DEV-001's
+  #     digest pin governs what a feature installs and says nothing about what
+  #     it configures, so nothing in this register saw the formatter change.
+  #
+  #     An **unstated** binding fails too, and that is the case that mattered:
+  #     the autopep8 binding was written by a feature, so no tracked file said
+  #     anything at all. An assert objecting only to a wrong value in a file
+  #     nobody had written would have passed the exact state it exists to catch.
+  #     Stating the binding at workspace scope is therefore the requirement, not
+  #     a way of correcting one.
+  #
+  #     Which language a gate owns and which setting holds it are both register
+  #     facts: a stack may mandate a formatter for one file type and not
+  #     another, and not every linter is its language's formatter — eslint
+  #     declares no binding here for that reason.
+  # 22: SEC-003 and `platform_credentials:`, the two things ADR 0022 requires
+  #     before any platform token reaches CI. Nothing in this register could
+  #     see one: `no-static-cloud-keys` reads `cloud_credentials:`, every name
+  #     in which is a cloud provider key, so a `GH_ADMIN_TOKEN` repository
+  #     secret would have left SEC-002 reporting PASS over a standing
+  #     administrative credential.
+  #
+  #     The block is an allow-list rather than a deny-list, which is the
+  #     asymmetry with `cloud_credentials:` and the reason omitting it is safe:
+  #     a deny-list that has not heard of a credential passes it, an allow-list
+  #     that has not heard of one fails it. `triggers` is what makes ADR 0022's
+  #     Option 3 checkable — a standing credential names the events it may
+  #     appear under, so a branch adding `pull_request:` to reach the secret
+  #     fails rather than self-triggering quietly.
+  # 23: SEC-003 gains a `kind: remote` block — ADR 0022 requirement 3. The
+  #     register recorded `max_lifetime_hours` at contract 22 and nothing read
+  #     it, which is the shape of a promise rather than a control:
+  #     `platform_token_expires_within` compares the expiry GitHub reports for
+  #     the credential the run carries against the longest lifetime this
+  #     register permits, and fails one that outlives it.
+  #
+  #     Two absences that look alike are separated rather than collapsed. No
+  #     expiry header on a **classic** token means the token never expires,
+  #     which fails; on a fine-grained or installation token the header is how
+  #     expiry is reported at all, so its absence is GitHub declining to answer
+  #     and the block is UNCLASSIFIED. Reading the second as the first would
+  #     report a violation produced by not having looked, which is the
+  #     substitution SEC-001's remote block already refuses.
+  # 24: SEC-003 gains a second `kind: remote` block — ADR 0022 requirement 4.
+  #     `platform_token_is_not_classic` reads the presence of `X-OAuth-Scopes`,
+  #     which GitHub returns for a classic personal access token and for no
+  #     other kind. Presence rather than value: a classic token with no scopes
+  #     returns the header empty, and a check reading the value would pass the
+  #     one token that grants everything its owner can reach.
+  #
+  #     It identifies the instrument, not the scope. No API lets a fine-grained
+  #     token enumerate its own permissions, so "scoped to this repository,
+  #     Administration: read only" stays a human act recorded at issue time —
+  #     stated here because over-reading this as "the register verifies the
+  #     token is minimal" would be the substitution ADR 0022 warned about.
+  # 25: `platform_credentials:` names a standing credential for the first time.
+  #     Every requirement ADR 0022 § The precondition puts before a token is
+  #     closed — the control that can see one (22), the register fact naming
+  #     what may be carried (22), a verified expiry (23), a refused classic
+  #     instrument (24), and the test keeping this repository's own arrangement
+  #     out of what an adopter installs (no contract).
+  #
+  #     The entry raises the ceiling `platform_token_expires_within` compares
+  #     against, because that assert reads the largest lifetime any entry
+  #     permits: the run carries one of the credentials the register names and
+  #     nothing in an API response says which. Stated here rather than left to
+  #     be discovered — narrowing it means matching a credential to its entry,
+  #     which needs a way to identify the running token that GitHub does not
+  #     offer.
+  # 26: GOV-001's `partial:` is gone, because the half it declared unverified
+  #     is read. The meta-control now asks GitHub which status checks a merge
+  #     to the default branch actually waits for, and fails when a check the
+  #     register requires is not among them — the chain from a control to a
+  #     blocked merge is read end to end rather than in two pieces nothing
+  #     joins.
+  #
+  #     A meta-control gained a third input to do it: the resolved platform
+  #     target, handed in by the runner exactly as it is handed to a control's
+  #     blocks. Resolving it inside the meta-control would let two verdicts in
+  #     one report describe different repositories.
+  # 27: The checker is renamed. `tools.standard-check` becomes
+  #     `tools.register-check`, with `invocation: uv run register-check`, and
+  #     every gate's self-verification is spelled with it (ADR 0031). A skill
+  #     reading the old key finds nothing, which is the whole reason this
+  #     number moves for a rename.
+  #
+  #     CI-001's `required_checks:` did **not** move with it. Contract 28 is
+  #     that name, moved.
+  # 28: CI-001 requires `register-check` rather than `standard-check`, which is
+  #     the same string in four places — this list, the recorded ruleset, the
+  #     gating job's id, and the ruleset GitHub enforces. Only the last is not
+  #     a file, and no pull request can change it, so all four moved in one
+  #     change: this one, plus the confirmed API call that accompanied it.
+  #     GOV-001 reads the platform's enforced checks against this list, so a
+  #     rename that arrived here first would fail the run checking it.
+  # 29: The register says where an adopting repository gets the checker.
+  #     `tools.register-check.install` names the repository and the tag, and
+  #     `ecosystems.python.git_dependency` the spelling that joins them to a
+  #     package name (ADR 0032). Before this the register carried a comment
+  #     describing the shape of an answer — "an adopter installs the checker as
+  #     a dependency" — and named no artefact, so an adopter following
+  #     `docs/08-adopting.md` reached "run the checker" with nothing to run.
+  #
+  #     A skill reading the register must understand both, because
+  #     `register-install` is the skill that reads them and it is the first
+  #     thing `register-adopt` dispatches. Split across two sections
+  #     deliberately: the address is a fact about this project, and the
+  #     spelling is a fact about the ecosystem.
+  register_contract: 30
+
+# ---------------------------------------------------------------------------
+# Stack predicates. A control whose `applies_to` names a predicate that this
+# repo does not satisfy is SKIPPED, not failed. Predicates are evaluated by
+# register-check against the repo's own files — never self-declared.
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Pinned tool versions. ADR 0018: a version a repository might reasonably need
+# to differ, without the checker changing, is a register fact.
+#
+# Before contract 3 no version existed here at all, while four documents said
+# one did — markdownlint-cli2 was pinned in four places, gitleaks and uv in two
+# each, none authoritative, and a comment in lint.yml told humans to "change all
+# three together" where there were four. The `tool_versions_match_register`
+# assert compares every locus against this table, so drift is a verdict rather
+# than something a reader has to notice.
+# ---------------------------------------------------------------------------
+tools:
+  # `source` names the authority for the version. `lockfile` means a package
+  # manager already owns it and no version belongs here — the loci invoke the
+  # tool through that manager, so there is nothing to keep in step. `literal`
+  # means no package manager owns the tool, so the version lives here and each
+  # locus repeats it; those repetitions carry a `# renovate:` annotation so a
+  # bot updates them together, and `tool_versions_match_register` fails the
+  # build if one drifts.
+  #
+  # The annotation appears here too, and deliberately: the register is the
+  # authority, so a proposal that bumped the loci and left this table behind
+  # would be a proposal `tool_versions_match_register` rejects. `renovate.json`
+  # names this file first for that reason. Renovate is enabled for custom
+  # managers only — Dependabot keeps the ecosystems it understands.
+  #
+  # `pinned_at` names those loci. It was a four-path tuple inside the checker
+  # until contract 8, which meant two things: renaming a workflow took it out of
+  # comparison with nothing reporting the loss, and an adopting repository was
+  # told its tools were "pinned at no known locus" against a list of *this*
+  # repository's filenames. Which files repeat a version is a property of the
+  # repository, so it answers *yes* to ADR 0018's test. A declared site that
+  # does not exist, or that holds no pin, is a failure — silence is what this
+  # field exists to stop being read as agreement.
+  markdownlint-cli2:
+    source: lockfile
+    lockfile: package-lock.json
+    # How a locus reaches the pin. `npx --no-install markdownlint-cli2` was the
+    # invocation at every locus and it does not fail when the local install is
+    # missing — it falls through to PATH and runs whatever global binary is
+    # there, so `source: lockfile` asserted an authority nothing enforced
+    # (§ H6). Measured: with node_modules deleted, `npx --no-install` and
+    # `npm exec --no --` both exit 0 against a global, and the path below
+    # exits 127.
+    #
+    # The pair is symmetric. A `literal` tool records `pinned_at` — where its
+    # version is repeated. A `lockfile` tool records `invocation` — how the
+    # pinned artefact is reached, so that a locus cannot silently run another.
+    invocation: node_modules/.bin/markdownlint-cli2
+  gitleaks:
+    source: literal
+    # Where the release is fetched from. It lived only inside the `depName=`
+    # annotation below — a value for a bot to read, which `gate-secrets` then
+    # could not. A fork or an internal mirror is a reasonable thing for a
+    # repository to differ on without the checker changing (ADR 0018).
+    release_repo: gitleaks/gitleaks
+    # renovate: datasource=github-releases depName=gitleaks/gitleaks
+    version: "8.30.1"
+    # A bumped version needs a bumped digest, and no bot can compute one. The
+    # proposal carries that instruction in its body (renovate.json), and an
+    # unrevised digest fails the install rather than passing it.
+    sha256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    pinned_at:
+      - .devcontainer/setup.sh
+      - .github/workflows/register-check.yml
+  # The checker itself. SUP-003 and DEV-001 declare a `pre-commit` locus and
+  # have no third-party tool that could serve it — the check is this checker's
+  # own — so their pre-commit gate runs `register-check`, and a locus that runs
+  # a bare name resolves from PATH (ADR 0020). Recorded here so the gate writes
+  # the form the repository actually uses: an adopter installs the checker as a
+  # dependency and reaches it however their package manager does.
+  #
+  # `source: lockfile` is honest in this repository as well as in an adopting
+  # one, though for a different reason: here `register-check` is the project
+  # `uv.lock` resolves, rather than a dependency it pins. Either way `uv run`
+  # reaches the artefact uv.lock governs and nothing on PATH.
+  register-check:
+    source: lockfile
+    lockfile: uv.lock
+    invocation: uv run register-check
+    # Where an adopting repository obtains the checker (ADR 0032). Until
+    # contract 29 the comment above described the shape of an answer and named
+    # no artefact, so an adopter following `docs/08-adopting.md` reached "run
+    # the checker" with nothing to run — the gap being invisible from inside
+    # this repository, where `uv run register-check` resolves because the
+    # project being run is the project being checked.
+    #
+    # A fork or an internal mirror is a reasonable thing for a repository to
+    # differ on without the checker changing, so this answers *yes* to ADR
+    # 0018's test — the same argument that put `release_repo` here at contract
+    # 11. `register-install` reads it and writes what it finds; nothing about
+    # this address is spelled inside that skill.
+    #
+    # `ref` is a tag and the schema refuses anything else. An unpinned git
+    # dependency resolves to whatever the default branch says today, which is
+    # the defect DEV-001 refuses in an image tag and SUP-003 in an action ref;
+    # a checker that changed under an adopter between two runs would be the
+    # one tool in the repository that is not pinned.
+    install:
+      repository: https://github.com/Eaiger-Ent/ee-standard
+      ref: v0.5.0
+  uv:
+    source: literal
+    # Where the release artefact is fetched from, as for gitleaks. The
+    # devcontainer installs uv from a checksum-verified release rather than with
+    # `pip install`, because after ADR 0030 nothing in the container can pip:
+    # the only Python left is the base image's `python3-minimal`, which carries
+    # neither `pip` nor `ensurepip` (ADR 0030 revision 2). CI keeps
+    # `pip install uv==`: a GitHub runner brings its own interpreter, and that
+    # locus is not what the ADR decided.
+    release_repo: astral-sh/uv
+    # `datasource=pypi` while `release_repo` names GitHub, and the two are not
+    # in conflict: a datasource is where Renovate discovers versions, and uv
+    # publishes the same numbers to both. One dependency, one proposal, all four
+    # sites bumped together — which is what `tool_versions_match_register` then
+    # holds. `github-releases` would split it in two and find nothing, since
+    # that manager strips a leading `v` for gitleaks' tags and uv's carry none.
+    # renovate: datasource=pypi depName=uv
+    version: "0.12.5"
+    # The x86_64 asset's checksum, matching the `gitleaks` entry's convention;
+    # `.devcontainer/setup.sh` carries both architectures. Unlike gitleaks, uv
+    # publishes this beside the artefact as `<asset>.sha256` — so a bump can
+    # fetch and compare it rather than deriving it, but still needs a human to
+    # do so, and an unrevised digest fails the install rather than passing it.
+    sha256: 68a509da24b06b4223a1c0175fb5eb5bc79342b76cbeff0cfe51ac3f5b17b6b2
+    pinned_at:
+      - .devcontainer/setup.sh
+      - .github/workflows/register-check.yml
+      # Not a gate, and still a locus: `support-floor.yml` installs uv to run
+      # the tests on the oldest interpreter `requires-python` claims. A site
+      # that installs a pinned tool is a site that can drift from the register,
+      # whether or not a verdict depends on it.
+      - .github/workflows/support-floor.yml
+  # The interpreter every other Python tool runs inside, and until contract 20
+  # the only tool here that no locus pinned and nothing compared. `source:
+  # toolchain` is neither of the other two and both would be false: the value
+  # does not live here to be repeated (`literal`), and no package manager
+  # produced the file (`lockfile`). A human writes `.python-version` and every
+  # locus reads it through uv, so the duplication is removed rather than
+  # reconciled — and there is no version at any locus to keep in step, only a
+  # file that must be there.
+  #
+  # Measured before the pin (ADR 0027): the devcontainer ran 3.13.15 and CI ran
+  # 3.14.7, from the same three files. `requires-python = ">=3.13"` is a floor,
+  # and a floor selects nothing — so uv answered with what each machine had,
+  # and the gate deciding conformance ran on an interpreter no file named.
+  #
+  # That floor stays a floor, and stays in pyproject.toml. It is the package's
+  # support claim, not this repository's environment; narrowing it to force the
+  # environment would tell an adopter that register-check does not work on 3.14,
+  # which is false. The two facts are recorded separately from here on.
+  python:
+    source: toolchain
+    toolchain: .python-version
+    # How a locus reaches the interpreter the file names. `python3` would be the
+    # system interpreter the container's feature installs, which bootstraps
+    # `pip install uv` and answers `#!/usr/bin/env python3` and runs no gate
+    # (ADR 0020: a bare name resolves from PATH, and what answered would be
+    # a different interpreter from the one pinned here).
+    invocation: uv run
+
+# ---------------------------------------------------------------------------
+# Package ecosystems, and what counts as a lockfile for each. ADR 0018: this
+# was a dictionary in the checker covering Python and Node only, so a Go, Rust
+# or Java repository with no lockfile at all passed SUP-001. Nobody decided
+# that exemption — it was which keys someone wrote — and because the register
+# did not record it, no review and no `review_by` could surface it.
+# ---------------------------------------------------------------------------
+ecosystems:
+  # `frozen_install` is what CI installing from the lockfile *looks like* for
+  # this ecosystem, as regular expressions matched against a gating CI step.
+  # Added at contract 8. `ci-installs-frozen` held a two-entry map — python and
+  # node — so a repository with a `go.mod` was told "every CI install is frozen
+  # or exact-pinned" without one ever being checked. That is the same map ADR
+  # 0018 called the measured harm, in the assert beside the one it was moved out
+  # of (§ H3).
+  #
+  # The negative half — which commands *re-resolve* — stays in the checker with
+  # its reason recorded in ADR 0018: answering it means parsing a package
+  # manager's argument grammar, and argument grammars in the register make the
+  # register a program, which ADR 0018 rejected by name.
+  python:
+    manifest: [pyproject.toml]
+    lockfiles: [uv.lock, poetry.lock, pdm.lock]
+    dependabot: [uv, pip]
+    test_commands: [pytest, tox, nox, "make test"]
+    # Where a package appears inside this ecosystem's lockfile, as regular
+    # expressions with `{package}` substituted for the name being looked for.
+    # ADR 0020 case C: `uv run <tool>` reaches the artefact uv.lock pins, and
+    # falls through to PATH only when the tool is absent from the project
+    # altogether. No spelling of `invocation` closes that, because the question
+    # is whether the pin exists rather than how it is reached — so it is
+    # answered here, beside `frozen_install`, and for the same reason: a
+    # lockfile format the checker has not heard of is a pin nothing verifies.
+    # How a gate creates the pin it needs, keyed by the lockfile that is
+    # present. Contract 13's other half: `lock_entry` makes an absent pin a
+    # verdict, and a gate that cannot answer that verdict would deploy a control
+    # it is unable to satisfy. Required for any ecosystem a stack names, with an
+    # entry for every lockfile it declares — the command differs per package
+    # manager within one ecosystem, which is why it is keyed by lockfile rather
+    # than by ecosystem. Same argument as `release_repo` at contract 11: the one
+    # value the gate needed and could not derive.
+    add_dev_dependency:
+      uv.lock: "uv add --dev {package}"
+      poetry.lock: "poetry add --group dev {package}"
+      pdm.lock: "pdm add --dev {package}"
+    # How this ecosystem spells a dependency on a git ref, as the `{package}`
+    # that goes into `add_dev_dependency` above. PEP 440 calls it a direct
+    # reference; it is ecosystem grammar rather than repository policy, which
+    # is why it sits here and not in `tools.register-check.install` beside the
+    # address it consumes. Optional, and its absence is a verdict:
+    # `register-install` stops and says this ecosystem has no spelling for a
+    # git dependency rather than inventing one, which is the same rule
+    # `add_dev_dependency` follows one field up. Only python declares one
+    # today, and ADR 0032 § The non-Python adopter is not solved says so.
+    git_dependency: "{package} @ git+{repository}@{ref}"
+    # What a gate *writes* where `frozen_install` above records what the checker
+    # *accepts*. The two are a pair and the schema holds them together: every
+    # command here must match one of the patterns above, so a gate cannot write
+    # an install step the checker will not credit. Keyed by lockfile for the
+    # same reason `add_dev_dependency` is — `uv sync --frozen` and
+    # `poetry install --sync` are both python, and which is right is a fact
+    # about the repository rather than about the ecosystem.
+    frozen_install_command:
+      uv.lock: "uv sync --frozen"
+      poetry.lock: "poetry install --sync"
+      pdm.lock: "pdm install --frozen-lockfile"
+    lock_entry:
+      # uv.lock, poetry.lock and pdm.lock all spell a package the same way.
+      - '(?m)^name = "{package}"$'
+    frozen_install:
+      - '\buv sync\b[^\n]*--(?:frozen|locked)\b'
+      - '\bpip3? install\b[^\n]*-r\s+\S+'
+      - '\b(?:poetry|pdm) install\b[^\n]*--(?:sync|frozen|no-update|check)\b'
+  node:
+    manifest: [package.json]
+    lockfiles: [package-lock.json, pnpm-lock.yaml, yarn.lock, bun.lockb]
+    dependabot: [npm]
+    test_commands: ["npm test", "npm run test", vitest, jest]
+    add_dev_dependency:
+      package-lock.json: "npm install --save-dev {package}"
+      pnpm-lock.yaml: "pnpm add --save-dev {package}"
+      yarn.lock: "yarn add --dev {package}"
+      bun.lockb: "bun add --dev {package}"
+    frozen_install_command:
+      package-lock.json: "npm ci"
+      pnpm-lock.yaml: "pnpm install --frozen-lockfile"
+      yarn.lock: "yarn install --immutable"
+      bun.lockb: "bun install --frozen-lockfile"
+    lock_entry:
+      # package-lock.json v2+ keys by install path; pnpm and yarn (berry)
+      # write `/name@version`; yarn classic writes the descriptor at the
+      # line start. bun.lockb is binary and matches none of them — which is
+      # reported as a lockfile that could not be read rather than as a pass.
+      - '"node_modules/{package}"'
+      - '(?m)^\s*/?{package}@'
+      - '(?m)^"?{package}@'
+    frozen_install:
+      - '\bnpm ci\b'
+      - '\byarn install\b[^\n]*--immutable\b'
+      - '\bpnpm install\b[^\n]*--frozen-lockfile\b'
+      # Added at contract 14. `bun.lockb` was listed as a node lockfile with no
+      # idiom that installs from it, so a bun repository could satisfy neither
+      # `ci-installs-frozen` nor the new `frozen_install_command` beside it —
+      # a lockfile the register recognised and no install it accepted.
+      - '\bbun install\b[^\n]*--frozen-lockfile\b'
+  go:
+    manifest: [go.mod]
+    lockfiles: [go.sum]
+    dependabot: [gomod]
+    test_commands: ["go test"]
+    frozen_install_command:
+      go.sum: "go mod download"
+    lock_entry:
+      # go.sum lines are `module/path v1.2.3 h1:…`.
+      - '(?m)^(?:\S+/)?{package} v'
+    # `-mod=readonly` is the default from Go 1.16, and every build verifies
+    # `go.sum`, so an ordinary `go build` already resolves from the lockfile.
+    # Stated rather than assumed: a repo that never runs the toolchain in CI
+    # has not shown that anything reads its lockfile.
+    frozen_install:
+      - '\bgo mod download\b'
+      - '\bgo (?:build|test|install|vet)\b'
+  rust:
+    manifest: [Cargo.toml]
+    lockfiles: [Cargo.lock]
+    dependabot: [cargo]
+    test_commands: ["cargo test"]
+    frozen_install_command:
+      Cargo.lock: "cargo fetch --locked"
+    lock_entry:
+      # Cargo.lock is TOML, one `[[package]]` table per crate.
+      - '(?m)^name = "{package}"$'
+    frozen_install:
+      - '\bcargo\b[^\n]*--(?:locked|frozen)\b'
+  java:
+    manifest: [pom.xml, build.gradle, build.gradle.kts]
+    lockfiles: [gradle.lockfile, gradle/verification-metadata.xml]
+    dependabot: [maven, gradle]
+    test_commands: ["gradle test", "mvn test"]
+    frozen_install_command:
+      gradle.lockfile: "./gradlew --offline build"
+      gradle/verification-metadata.xml: "./gradlew --offline build"
+    lock_entry:
+      # gradle.lockfile writes `group:artifact:version=…`;
+      # verification-metadata.xml writes `<component … name="artifact" …>`.
+      - '(?m)^\S+:{package}:'
+      - 'name="{package}"'
+    frozen_install:
+      - '\b(?:\./)?gradlew?\b[^\n]*--offline\b'
+      - '\bmvn\b[^\n]*(?:--offline|-o)\b'
+  ruby:
+    manifest: [Gemfile, "*.gemspec"]
+    lockfiles: [Gemfile.lock]
+    dependabot: [bundler]
+    test_commands: [rspec, "bundle exec rspec", "rake test"]
+    frozen_install_command:
+      Gemfile.lock: "bundle install --deployment"
+    lock_entry:
+      # Gemfile.lock indents `  name (version)` under `specs:`.
+      - '(?m)^\s+{package} \('
+    frozen_install:
+      - '\bbundle install\b[^\n]*--(?:deployment|frozen)\b'
+      - '\bbundle config\b[^\n]*frozen[^\n]*true'
+
+# ---------------------------------------------------------------------------
+# Per-stack gate tools. ADR 0018: which linter a repository mandates, where its
+# configuration lives, which editor extension serves it and how CI invokes it
+# all answer *yes* to the boundary test — a reasonable Equal Experts repository
+# could need any of them to differ without the checker changing. Before this
+# section they were a dictionary inside the checker, so "the standard mandates
+# ruff" was a fact no reviewer could find and no `review_by` could surface.
+#
+# Keyed by predicate: a stack applies to a repository exactly when its predicate
+# does, evaluated against files and never self-declared. `applies_to` on a
+# control names the same predicates, so LNT-001 applying to `[python,
+# typescript]` and the two stacks below are the same statement made once.
+#
+# `config` lists where the tool's configuration may live. A `section` names a
+# table within the file — `tool.ruff` in TOML, `mypy` in INI, `compilerOptions`
+# in JSON — because a file existing is not the same as the tool being configured
+# in it. `strict_key` is a boolean inside that section which must be true.
+# Reading a boolean at a section path in TOML, INI or JSON is detection
+# implementation and stays in the checker (ADR 0018).
+#
+# `pre_commit` and `editor_extension` are optional to the schema and required in
+# fact: the validator demands whichever locus the controls using this role
+# declare, so a control claiming an `editor` locus cannot rest on a gate that
+# names no extension.
+# ---------------------------------------------------------------------------
+stacks:
+  python:
+    # The tracked files this stack's gates are claimed to cover. A gate naming a
+    # `coverage_key` must cover every one of them — see the comment on that
+    # field below.
+    source_globs: ["*.py", "*.pyi"]
+    # Whose lockfile pins this stack's gate tools. Added at contract 13: a stack
+    # and an ecosystem are different things — `python` the stack mandates ruff
+    # and mypy, `python` the ecosystem knows what a lockfile is — and which one
+    # pins the other's tools is a repository fact, since a TypeScript repo could
+    # reasonably run its linter from a different package manager than the one
+    # its application uses. The names match here and the field says so rather
+    # than the checker assuming it.
+    ecosystem: python
+    gates:
+      lint:
+        tool: ruff
+        # ADR 0020 applied to the quality gates. `invocation` is what every
+        # locus runs and what the checker matches a CI step against, so a bare
+        # `ruff check` is a locus that resolves from PATH — the same fall-through
+        # `npx --no-install` had for DOC-001 (§ H6), verified against whatever
+        # global happens to be installed rather than against the version the
+        # lockfile pins. `uv run` reaches uv.lock's artefact and fails when it
+        # is absent. `gate-quality` writes this string verbatim at every locus,
+        # so the form here is the form deployed.
+        invocation: uv run ruff check
+        pre_commit: ruff
+        editor_extension: charliermarsh.ruff
+        # Which file type that extension must *hold*, and where the repository
+        # says so. Added at contract 21 (ADR 0029 points 3 and 4): the extension
+        # being installed is not the extension being the tool that runs, and the
+        # difference is not academic — `python:1` published
+        #   "[python]": { "editor.defaultFormatter": "ms-python.autopep8" }
+        # and shipped the extension to match, so autopep8 formatted Python in a
+        # repository pinning ruff while `charliermarsh.ruff` sat installed
+        # beside it and this control passed.
+        #
+        # The binding is read from `.vscode/settings.json`, at workspace scope,
+        # because it is the only scope that wins by documented rule — the
+        # containers.dev merge table says of `customizations` only that
+        # "merging is left to the tools" (ADR 0029). A binding absent there is a
+        # violation, not a default: the state this catches is the one where
+        # nothing tracked said anything and a feature decided.
+        editor_binding: {language: python, setting: editor.defaultFormatter}
+        config:
+          - {file: pyproject.toml, section: tool.ruff}
+          - {file: ruff.toml}
+          - {file: .ruff.toml}
+      typecheck:
+        tool: mypy
+        invocation: uv run mypy
+        pre_commit: mypy
+        strict_key: strict
+        # Where the tool's *allow-list* lives, as a dotted path from the config
+        # file's root. ADR 0019 applied to a coverage list rather than an
+        # exemption list: `files = ["src", "tests", …]` is an exemption whose
+        # entries are the things it does **not** name, so a tracked module
+        # nothing imports is silently unchecked while TYP-001 claims "all
+        # first-party source". Every file matching `source_globs` must be under
+        # one of the roots named here.
+        #
+        # Omitting this field asserts that the tool has no allow-list to check.
+        # That has to be a deliberate statement about the tool, not an oversight.
+        coverage_key: tool.mypy.files
+        config:
+          - {file: pyproject.toml, section: tool.mypy}
+          - {file: mypy.ini, section: mypy}
+          - {file: .mypy.ini, section: mypy}
+          - {file: setup.cfg, section: mypy}
+  typescript:
+    source_globs: ["*.ts", "*.tsx"]
+    ecosystem: node
+    gates:
+      lint:
+        tool: eslint
+        # The node half of the same rule, and the spelling DOC-001 already uses:
+        # `npx --no-install` and `npm exec --no --` both fall through to a global
+        # (measured, ADR 0020); the lockfile's own binary path does not.
+        invocation: node_modules/.bin/eslint
+        pre_commit: eslint
+        editor_extension: dbaeumer.vscode-eslint
+        # No `editor_binding`, and deliberately: eslint is a linter and not
+        # TypeScript's formatter, so demanding it hold
+        # `editor.defaultFormatter` would mandate a binding no reasonable
+        # repository writes. Omitting the field asserts this gate's tool holds
+        # no file type, the same shape `coverage_key`'s absence has. A stack
+        # that does mandate a TypeScript formatter states it here.
+        config:
+          - {file: eslint.config.*}
+          - {file: .eslintrc*}
+      typecheck:
+        tool: tsc
+        # The name in the lockfile, where it differs from the tool's. `tsc` is a
+        # binary the `typescript` package ships, so looking for `tsc` in
+        # package-lock.json finds nothing and would fail a repository that pins
+        # it correctly. Which package ships a tool is a fact about the tool, and
+        # a repository could reasonably get the same tool from another package.
+        package: typescript
+        invocation: node_modules/.bin/tsc
+        pre_commit: tsc
+        strict_key: strict
+        # `include` sits at the document root, not under `compilerOptions`,
+        # which is why the path is absolute within the file. Absent, tsc
+        # compiles everything below the tsconfig — no allow-list, nothing to
+        # check, which the assert treats as coverage rather than as silence.
+        coverage_key: include
+        config:
+          - {file: tsconfig.json, section: compilerOptions}
+
+# ---------------------------------------------------------------------------
+# The static cloud credentials SEC-002 forbids in a workflow. ADR 0018's
+# ratified decision named "cloud-key names" among the rules that move here, and
+# the move never landed: the list stayed a seven-name tuple in the checker
+# through three implementation passes, mentioned in none of them and reasoned
+# nowhere, while the criterion recording ADR 0018 as implemented was ticked
+# (§ H4). A repository on a cloud this list has not heard of is a repository
+# where SEC-002 passes by not knowing the name of the thing it is looking for.
+#
+# Matching is case-insensitive and treats `-` and `_` alike, because the same
+# credential is `AWS_ACCESS_KEY_ID` as an env var and `aws-access-key-id:` as an
+# action input. That spelling equivalence is detection implementation and stays
+# in the checker (ADR 0018).
+# ---------------------------------------------------------------------------
+cloud_credentials:
+  - AWS_ACCESS_KEY_ID
+  - AWS_SECRET_ACCESS_KEY
+  - GOOGLE_APPLICATION_CREDENTIALS
+  - GCP_SA_KEY
+  - SERVICE_ACCOUNT_KEY
+  - AZURE_CLIENT_SECRET
+  - AZURE_CREDENTIALS
+
+# ---------------------------------------------------------------------------
+# What CI may carry, and under which events. ADR 0022: a platform token in CI
+# is governed rather than forbidden, and nothing here could see one — SEC-002
+# reads `cloud_credentials:` above, every name in which is a cloud provider
+# key, so a `GH_ADMIN_TOKEN` secret would leave it green over a standing
+# administrative credential. SEC-003 reads this block instead.
+#
+# An entry is a permission rather than a description: a secret named here may
+# be referenced by a workflow, and one that is not may not. Omitting the block
+# permits none, which is the strict direction — unlike `cloud_credentials:`,
+# whose absence would leave a control looking for nothing.
+#
+# `triggers` is what makes ADR 0022's Option 3 checkable rather than a
+# convention. A standing credential names the events it may appear under, so a
+# branch that adds `pull_request:` to a workflow in order to reach the secret
+# fails here instead of succeeding quietly — the exfiltration path that ADR
+# recorded, and the reason the guard cannot live in the workflow file the pull
+# request is editing. `any` is legitimate only for a credential the platform
+# mints per job: the trigger cannot change what such a token reaches, because
+# it does not outlive the job that ran under it.
+#
+# This register names no standing platform credential. Which arrangement a
+# repository chooses for one — a repository secret, an app installation token,
+# a deployment environment a pull request cannot edit — is that repository's
+# posture and is argued in ADR 0022, not here. A register that recommended one
+# would hand the authoring repository's own convenience to every repository
+# that reads it, which is ADR 0022 requirement 6 (and `tests/test_posture.py`
+# is what makes it a build failure rather than something to remember).
+#
+# What this block holds is the rule, which is the same for everyone: a
+# credential CI may reference is named, its events are named, and its maximum
+# life is named. ADR 0022's § precondition forbids introducing any such secret
+# before this block and SEC-003 exist.
+# ---------------------------------------------------------------------------
+platform_credentials:
+  # The standing credential this repository carries, from contract 25. It is
+  # fine-grained, scoped to this repository alone, and holds
+  # `Administration: read` — the one permission SEC-001's remote block needs and
+  # the default job token does not have.
+  #
+  # `max_lifetime_hours` is a **permission rather than a measurement**: it is
+  # the longest life this register allows a standing platform credential, not a
+  # description of the token that happens to exist. SEC-003's remote block reads
+  # what GitHub reports for the credential a run actually carries and fails one
+  # that outlives this — so a token issued for longer is caught by the check
+  # rather than by whoever remembers to look.
+  #
+  # The policy is ninety days. The number is 2184 hours — ninety-one — and the
+  # extra day is not slack, it is what the policy costs to state in hours. The
+  # first live run of this block measured a token issued for "90 days" with
+  # 2160.73 hours left, so a ceiling of exactly 2160 rejected the option a
+  # person picks when they pick ninety days. GitHub's expiry is a timestamp
+  # rather than a count of hours from the moment anything reads it, and no
+  # amount of care in the checker recovers a day the register never allowed.
+  #
+  # Both events are named because both need the answer: a push run and a pull
+  # request run each verify the same controls, and the flip that ends ADR 0016's
+  # tolerance has to hold on the runs that gate a merge.
+  - name: PLATFORM_READ_TOKEN
+    triggers: [push, pull_request]
+    max_lifetime_hours: 2184
+  - name: GITHUB_TOKEN
+    # Created by GitHub at the start of each job and expired when that job
+    # finishes; 24 hours is the documented ceiling, reached only where a
+    # self-hosted runner refreshes it. Every workflow here reaches it as
+    # `${{ github.token }}`, which is the same credential under another
+    # spelling — that equivalence is detection implementation and stays in the
+    # checker, as `cloud_credentials:` spelling equivalence does.
+    triggers: any
+    max_lifetime_hours: 24
+
+# ---------------------------------------------------------------------------
+# What counts as swallowing a failure. ADR 0018: a house idiom this list does
+# not know is a suppression that goes undetected, and adding one strengthens
+# detection — so the set belongs where it can be reviewed rather than inside
+# `no_failure_suppression`. `|| :` is the terse spelling of `|| true`, and its
+# absence from the checker's original set is what let the commonest short idiom
+# through (§ D).
+# ---------------------------------------------------------------------------
+suppression:
+  - '\|\|\s*true\b'
+  - '\|\|\s*:\s*(?:$|[;&|])'
+  - '\|\|\s*exit 0\b'
+  - '\bset \+e\b'
+  - '--exit-zero\b'
+
+predicates:
+  always: true
+  python: "pyproject.toml exists"
+  typescript: "tsconfig.json exists"
+  container: "any Dockerfile exists"
+  terraform: "any *.tf file exists"
+  github-actions: ".github/workflows/ exists"
+  devcontainer: ".devcontainer/devcontainer.json exists"
+
+# ---------------------------------------------------------------------------
+# Tier 1 — birth conditions.
+#
+# Every Tier-1 control is `blocking` from the first commit and carries
+# `baseline: null`. A greenfield repo has no legacy to exempt, so there is
+# nothing to baseline; a control that cannot be met at birth does not belong
+# in Tier 1. Tier 2 (advisory windows) and Tier 3 (as earned) are defined in
+# docs/04-build-plan.md and added to this file in later phases.
+# ---------------------------------------------------------------------------
+controls:
+
+  # --- Secrets -------------------------------------------------------------
+
+  - id: SEC-001
+    title: A commit containing a secret cannot reach the remote
+    enforces: >
+      gitleaks runs as a pre-commit hook and as a CI job, and GitHub secret
+      scanning push protection is enabled on the repository.
+    standard:
+      name: OWASP Secrets Management Cheat Sheet
+      url: https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html
+    also_see:
+      - name: GitHub push protection
+        url: https://docs.github.com/en/code-security/secret-scanning/introduction/about-push-protection
+      - name: EE Supply Chain Security Handbook
+        url: https://github.com/EqualExperts/ee-supply-chain-security-handbook
+    tier: 1
+    rung: blocking
+    locus: [pre-commit, ci, remote]
+    applies_to: [always]
+    verify:
+      - kind: command
+        run: gitleaks detect --no-banner --redact
+      # Three loci are declared above, and until contract 11 one was read:
+      # `precommit_hook_present` checked the hook, the remote block defers to
+      # Phase 3, and nothing at all read the ci locus. Deleting the secret-scan
+      # job left SEC-001 green. `secrets_gate_wired_at_all_loci` subsumes the
+      # hook check and adds the job, so both local loci now fail when deleted.
+      #
+      # `ignore_file` is here rather than in the checker because where a
+      # scanner keeps its suppressions is a property of the scanner a repository
+      # chose (ADR 0018). SEC-001 is `variance: forbidden` with `baseline: null`,
+      # so an entry hiding a file git tracks is a weakening (ADR 0019); one
+      # naming nothing tracked scopes the tool and is allowed.
+      - kind: file
+        assert: secrets_gate_wired_at_all_loci
+        args: { tool: gitleaks, ignore_file: .gitleaksignore }
+      # The rule that acts before a credential is a git object. Every other
+      # block above and below reads what git or the remote already has;
+      # `fetch-secrets.sh` writes these two files on the host at every container
+      # start, so an ignore rule is what stands between a real token and
+      # `git add -A`. Until contract 18 the dependency was a comment in
+      # `.gitignore` saying SEC-001 depended on it, which is a claim rather than
+      # a check — and the shipped devcontainer template carried the same comment
+      # into every repository that copies it.
+      - kind: file
+        assert: secret_files_are_gitignored
+        args:
+          paths: [.devcontainer/.env, .devcontainer/.env.docker]
+      # The gate's own deployment, read back by the gate that wrote it — a
+      # stamp nothing reads records a claim rather than establishing one (§ F).
+      - kind: file
+        assert: provenance_stamp_present
+        args: { skill: gate-secrets }
+      - kind: remote
+        assert: github_push_protection_enabled
+    owner: platform-engineering
+    deployed_by: gate-secrets
+    variance: forbidden
+    baseline: null
+    review_by: 2027-08-16
+    rationale_adr: https://github.com/Eaiger-Ent/ee-standard/blob/main/docs/adr/0001-secrets-never-reach-the-remote.md
+
+  - id: SEC-002
+    title: CI authenticates without a long-lived cloud credential
+    enforces: >
+      No workflow references a static cloud key secret; cloud access is obtained
+      via OIDC workload identity federation.
+    standard:
+      name: NIST SP 800-218 (SSDF) PW.9
+      url: https://csrc.nist.gov/pubs/sp/800/218/final
+    also_see:
+      - name: Workload Identity Federation
+        url: https://cloud.google.com/iam/docs/workload-identity-federation
+    tier: 1
+    rung: blocking
+    locus: [ci]
+    applies_to: [github-actions]
+    verify:
+      - kind: file
+        assert: no-static-cloud-keys
+    owner: platform-engineering
+    variance: forbidden
+    baseline: null
+    review_by: 2027-08-16
+    rationale_adr: https://github.com/Eaiger-Ent/ee-standard/blob/main/docs/adr/0002-federated-ci-identity.md
+
+  # ADR 0022. SEC-002 above stays cloud-scoped: its title, its `enforces`, its
+  # NIST citation and ADR 0002 are all about cloud identity, and broadening it
+  # would make one control mean two things. A platform token needs its own
+  # entry, and this is it — the control that can see one at all.
+  #
+  # The allow-list is the point. This repository intends to carry exactly one
+  # standing platform credential and carries none yet, so an enumerated
+  # exception is the "explicit, recorded exception rather than a quiet one"
+  # that ADR 0002 § Trade-offs calls the intended friction. A secret nobody
+  # wrote into `platform_credentials:` is a credential nobody decided.
+  - id: SEC-003
+    title: CI carries no platform credential the register does not name
+    enforces: >
+      No workflow references a secret that `platform_credentials:` does not
+      name, or references a named one under an event that entry does not
+      permit.
+    standard:
+      name: OWASP Top 10 CI/CD Security Risks — CICD-SEC-6
+      url: https://owasp.org/www-project-top-10-ci-cd-security-risks/CICD-SEC-06-Insufficient-Credential-Hygiene
+    also_see:
+      - name: Automatic token authentication
+        url: https://docs.github.com/en/actions/concepts/security/github_token
+      - name: Using secrets in GitHub Actions
+        url: https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets
+    tier: 1
+    rung: blocking
+    locus: [ci]
+    applies_to: [github-actions]
+    verify:
+      - kind: file
+        assert: no_unregistered_workflow_secrets
+      # ADR 0022 requirement 3, at contract 23. The file block above reads
+      # which secrets a workflow names; it cannot read what one of them *is*.
+      # A maximum lifetime recorded in `platform_credentials:` and compared
+      # against nothing is the promise ADR 0002 rejected a static cloud key
+      # for, so this block reads the expiry GitHub reports for the credential
+      # the run is authenticated with and fails one that outlives the register's
+      # maximum.
+      #
+      # It answers only inside a GitHub Actions job. SEC-003's locus is `ci`,
+      # and the token in a developer's shell is a different credential — a
+      # verdict from it would settle a question nobody asked. Everywhere else
+      # the block is UNCLASSIFIED, which denies the run a `0` exit rather than
+      # claiming a pass (ADR 0016).
+      - kind: remote
+        assert: platform_token_expires_within
+      # ADR 0022 requirement 4, at contract 24. The block above asks how long
+      # the credential lasts; this one asks what it *is*. A classic personal
+      # access token grants its readers access to every repository its owner can
+      # reach, so carrying one in CI is a different act from carrying a
+      # fine-grained token however short its life — and `X-OAuth-Scopes` comes
+      # back for a classic token and for no other kind, which makes the
+      # instrument readable rather than promised.
+      #
+      # Two blocks rather than one, where the ADR wrote "the same remote assert
+      # can". One property per verdict is why: in CI the expiry question has no
+      # answer and this one does, and a single assert would have thrown that
+      # answer away with it.
+      - kind: remote
+        assert: platform_token_is_not_classic
+    owner: platform-engineering
+    variance: forbidden
+    baseline: null
+    review_by: 2027-08-24
+    rationale_adr: https://github.com/Eaiger-Ent/ee-standard/blob/main/docs/adr/0022-a-platform-token-ci-carries.md
+
+  # --- Supply chain --------------------------------------------------------
+
+  - id: SUP-001
+    title: Dependencies resolve from a committed lockfile
+    enforces: >
+      A lockfile exists for every package manager in use, is committed, and CI
+      installs from it in frozen mode rather than re-resolving. Every tool this
+      register pins resolves to the version recorded under `tools:`, at every
+      locus that installs it — the same discipline applied to the toolchain
+      rather than to the dependency graph.
+    standard:
+      name: OpenSSF Baseline
+      url: https://baseline.openssf.org/
+    tier: 1
+    rung: blocking
+    locus: [ci]
+    # `always`, not `[python, typescript]`. Naming two stacks re-created inside
+    # the register the exemption ADR 0018 moved out of the checker: the register
+    # defines six ecosystems, and a Go, Rust, Java or Ruby repository skipped
+    # this control rather than being verified by it (§ H3). Which ecosystems a
+    # repository is in is detected from `ecosystems:` by the asserts below, and
+    # a repository with no package manager at all passes on that finding rather
+    # than on a predicate that never looked.
+    applies_to: [always]
+    verify:
+      - kind: file
+        assert: lockfile_present_and_tracked
+      - kind: file
+        assert: ci-installs-frozen
+      - kind: file
+        assert: tool_versions_match_register
+      # The gate's own deployment, read back by the gate that wrote it. Per
+      # control rather than per gate: `gate-supply-chain` owns three, so a stamp
+      # naming SUP-002 satisfying SUP-001 would let the frozen-install step go
+      # unstamped with nothing reporting it (contract 12's finding, inherited).
+      - kind: file
+        assert: provenance_stamp_present
+        args: { skill: gate-supply-chain }
+    owner: platform-engineering
+    deployed_by: gate-supply-chain
+    variance: narrowing-only
+    baseline: null
+    review_by: 2027-08-16
+    rationale_adr: https://github.com/Eaiger-Ent/ee-standard/blob/main/docs/adr/0003-frozen-dependency-resolution.md
+
+  - id: SUP-002
+    title: Dependency updates are proposed automatically
+    enforces: >
+      A Dependabot or Renovate configuration exists and covers every ecosystem
+      present in the repo, including GitHub Actions.
+    standard:
+      name: OpenSSF Scorecard — Maintained / Dependency-Update-Tool
+      url: https://scorecard.dev/
+    also_see:
+      - name: Dependabot
+        url: https://docs.github.com/en/code-security/dependabot/working-with-dependabot
+    tier: 1
+    rung: blocking
+    locus: [ci]
+    applies_to: [always]
+    verify:
+      - kind: file
+        assert: dependency_update_config_covers_all_ecosystems
+      - kind: file
+        assert: provenance_stamp_present
+        args: { skill: gate-supply-chain }
+    owner: platform-engineering
+    deployed_by: gate-supply-chain
+    variance: narrowing-only
+    baseline: null
+    review_by: 2027-08-16
+    rationale_adr: https://github.com/Eaiger-Ent/ee-standard/blob/main/docs/adr/0004-automated-dependency-proposals.md
+
+  - id: SUP-003
+    title: Third-party CI actions are pinned to a commit SHA
+    enforces: >
+      Every `uses:` in every workflow references a 40-character commit SHA, not
+      a tag or branch. Actions published by the repository owner are exempt.
+    standard:
+      name: SLSA v1.0 Build levels
+      url: https://slsa.dev/spec/v1.0/levels
+    tier: 1
+    rung: blocking
+    locus: [pre-commit, ci]
+    applies_to: [github-actions]
+    verify:
+      - kind: file
+        assert: actions-pinned-to-sha
+      # Two loci are declared above and until contract 14 neither was read.
+      # `actions-pinned-to-sha` reads the *property* — every `uses:` is a SHA —
+      # out of the workflow files, which is not the same claim as "something
+      # enforces this at pre-commit and in CI". This repository reported PASS
+      # with no pre-commit hook for SUP-003 of any kind. Same shape as SEC-001
+      # at contract 11, same move.
+      #
+      # The gate is the checker itself: there is no third-party tool that reads
+      # this register's notion of an owner-exempt action, and a second
+      # implementation would eventually disagree with the first. `invocation`
+      # comes from `tools.register-check`, because a locus running a bare name
+      # resolves from PATH (ADR 0020).
+      - kind: file
+        assert: gate_wired_at_declared_loci
+        args: { tool: register-check }
+      - kind: file
+        assert: provenance_stamp_present
+        args: { skill: gate-supply-chain }
+    owner: platform-engineering
+    deployed_by: gate-supply-chain
+    variance: narrowing-only
+    baseline: null
+    review_by: 2027-08-16
+    rationale_adr: https://github.com/Eaiger-Ent/ee-standard/blob/main/docs/adr/0005-pinned-ci-actions.md
+
+  # --- Build and runtime ---------------------------------------------------
+
+  - id: BLD-001
+    title: Every container image stage ends as a non-root user
+    enforces: >
+      The final stage of every Dockerfile declares a USER that is not root and
+      not numeric 0; and a devcontainer states a non-root `containerUser` or
+      `remoteUser` rather than inheriting whatever its base image uses.
+    standard:
+      name: CIS Docker Benchmark §4.1
+      url: https://www.cisecurity.org/benchmark/docker
+    also_see:
+      - name: hadolint
+        url: https://github.com/hadolint/hadolint
+      - name: devcontainer.json reference — remoteUser
+        url: https://containers.dev/implementors/json_reference/
+    tier: 1
+    rung: blocking
+    locus: [pre-commit, ci]
+    # One property, two shapes. A repo may have a Dockerfile, a devcontainer, or
+    # both, and each block below names the shape it can actually read: hadolint
+    # against a repo with no Dockerfile is a category error, not a finding.
+    applies_to: [container, devcontainer]
+    verify:
+      - kind: file
+        assert: dockerfile_final_user_is_non_root
+        applies_to: [container]
+      - kind: command
+        run: hadolint --failure-threshold error
+        applies_to: [container]
+      # A devcontainer built from `image:` has no Dockerfile to read. Before
+      # this block the whole control skipped here, so `remoteUser` was a JSON
+      # key nothing verified and the Phase 0.5 criterion was ticked on it.
+      - kind: file
+        assert: devcontainer_user_is_non_root
+        applies_to: [devcontainer]
+      # Two loci were declared from Phase 0 and neither was read: the three
+      # blocks above check the *property* — the final USER, the declared
+      # container user — out of the files on disk, which is a different claim
+      # from something enforcing it before a commit lands and before a merge
+      # does (contract 14's finding, in the control beside it).
+      #
+      # The gate is the checker, and it covers both halves at once:
+      # `register-check run --control BLD-001` runs the `hadolint` block above
+      # through the same path the audit uses, so a repository with a Dockerfile
+      # needs no second wiring for it. What such a repository does need is a
+      # `tools.hadolint` entry naming the loci it installs the linter at — an
+      # absent tool is UNCLASSIFIED (ADR 0016) rather than a pass, and this
+      # register pins none because this repository has no Dockerfile.
+      - kind: file
+        assert: gate_wired_at_declared_loci
+        args: { tool: register-check }
+      - kind: file
+        assert: provenance_stamp_present
+        args: { skill: gate-build }
+    owner: platform-engineering
+    deployed_by: gate-build
+    variance: forbidden
+    baseline: null
+    review_by: 2027-08-16
+    rationale_adr: https://github.com/Eaiger-Ent/ee-standard/blob/main/docs/adr/0006-containers-run-unprivileged.md
+
+  - id: DEV-001
+    title: Devcontainer features are version-pinned
+    enforces: >
+      `.devcontainer/devcontainer-lock.json` exists and pins every feature
+      referenced by `devcontainer.json` to a resolved digest, and the `image`
+      reference in `devcontainer.json` carries an `@sha256:` digest. A complete
+      lock file over a floating image tag is the more dangerous half-state —
+      it reads as solved and is not.
+    standard:
+      name: Dev Container Features specification
+      url: https://containers.dev/implementors/features/
+    also_see:
+      - name: Dev Container specification
+        url: https://containers.dev/implementors/spec/
+    tier: 1
+    rung: blocking
+    locus: [pre-commit, ci]
+    applies_to: [devcontainer]
+    verify:
+      - kind: file
+        assert: devcontainer_lock_covers_all_features
+      - kind: file
+        assert: devcontainer_image_digest_pinned
+      - kind: file
+        assert: gate_wired_at_declared_loci
+        args: { tool: register-check }
+      - kind: file
+        assert: provenance_stamp_present
+        args: { skill: gate-build }
+    owner: platform-engineering
+    deployed_by: gate-build
+    variance: narrowing-only
+    baseline: null
+    review_by: 2027-08-16
+    rationale_adr: https://github.com/Eaiger-Ent/ee-standard/blob/main/docs/adr/0007-pinned-devcontainer-features.md
+
+  # --- Repository controls -------------------------------------------------
+
+  - id: CI-001
+    title: The default branch cannot be written to without a passing check
+    enforces: >
+      A GitHub ruleset protects the default branch requiring a pull request,
+      at least one passing status check, and forbidding force-push.
+    standard:
+      name: OpenSSF Baseline — Branch Protection
+      url: https://baseline.openssf.org/
+    also_see:
+      - name: GitHub rulesets
+        url: https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets
+      - name: Trunk-based development
+        url: https://trunkbaseddevelopment.com/
+    tier: 1
+    rung: blocking
+    locus: [remote]
+    applies_to: [always]
+    verify:
+      # What the ruleset must say. One statement, read twice: the recorded
+      # artefact is compared against it, and so is the platform's own state.
+      # Two `args:` blocks would be two definitions of "protected", free to
+      # drift — and one reading serves both blocks, so the checker cannot hold
+      # two either.
+      - kind: file
+        assert: ruleset_recorded_matches_register
+        args:
+          path: .github/rulesets/default-branch.json
+          require_pull_request: true
+          require_status_checks: true
+          allow_force_push: false
+          # The checks a merge must wait for. Named here because which checks a
+          # repository requires is a fact about that repository, and held to the
+          # workflows by the assert so they cannot become a second copy of the
+          # job ids. Each must be a job in a workflow that runs on push or
+          # pull_request, and must not be suppressed — a required check that
+          # cannot fail is theme T-3 arriving through the ruleset.
+          #
+          required_checks: [register-check, lint-md]
+          # `strict_required_status_checks_policy`. With it off, a check that
+          # passed against stale code still counts, so a merge can be gated by a
+          # run that never saw what it is merging.
+          require_branches_up_to_date: true
+      - kind: file
+        assert: provenance_stamp_present
+        args: { skill: gate-repo }
+      # A recorded ruleset is what a repository *intends*; only the platform
+      # can say what it enforces, and nothing above may stand in for that. This
+      # block reads the rules GitHub reports as **in effect** on the default
+      # branch, so a ruleset that is merely recorded, or is in `evaluate` mode,
+      # or whose conditions miss the branch, satisfies nothing here. With no
+      # token it reports SKIPPED (no credentials), which is never a pass.
+      - kind: remote
+        assert: default_branch_ruleset_satisfies
+        args:
+          require_pull_request: true
+          require_status_checks: true
+          allow_force_push: false
+          # The same values the file block reads. Two lists would be two
+          # definitions of "protected", free to drift — and the drift would be
+          # invisible, since nothing compares two copies of a rule to each
+          # other. `test_gate_repo_deploy.py` holds the two `args:` equal.
+          required_checks: [register-check, lint-md]
+          require_branches_up_to_date: true
+    owner: platform-engineering
+    deployed_by: gate-repo
+    variance: forbidden
+    baseline: null
+    review_by: 2027-08-16
+    rationale_adr: https://github.com/Eaiger-Ent/ee-standard/blob/main/docs/adr/0008-protected-default-branch.md
+
+  # --- Code quality --------------------------------------------------------
+
+  - id: LNT-001
+    title: Lint and format violations block the merge
+    enforces: >
+      The configured linter runs at editor, pre-commit and CI loci from one
+      pinned configuration, and the CI invocation has no failure suppression.
+    standard:
+      name: Ruff rules
+      url: https://docs.astral.sh/ruff/rules/
+    also_see:
+      - name: pre-commit
+        url: https://pre-commit.com/
+    tier: 1
+    rung: blocking
+    locus: [editor, pre-commit, ci]
+    applies_to: [python, typescript]
+    verify:
+      - kind: file
+        assert: linter-wired-at-all-loci
+        # `role` selects the gate under each applicable stack in `stacks:`. The
+        # tool, its config locations, its pre-commit hook and its editor
+        # extension are read from there, so mandating a different linter is a
+        # register change and not a checker change (ADR 0018).
+        args: { role: lint }
+      # The other half of ADR 0020: `linter-wired-at-all-loci` verifies that
+      # every locus runs `uv run ruff check`, which reaches the artefact uv.lock
+      # pins — and reaches PATH instead if ruff is not in the project at all
+      # (ADR 0020 § Applied to the quality gates, case C). An invocation cannot
+      # assert the existence of the thing it invokes, so this block does.
+      - kind: file
+        assert: stack_tool_pinned_in_lockfile
+        args: { role: lint }
+      - kind: file
+        assert: no-failure-suppression
+      # Each of `gate-quality`'s three controls reads back its own stamp. The
+      # assert used to match on the skill alone, which credited a control for
+      # any stamp its gate had written anywhere: a stamp naming TST-001
+      # satisfied LNT-001's read-back, and the editor locus could go unstamped
+      # with nothing reporting it. This is the half `lint-md` never had (§ F),
+      # and it is per control because a gate deploying three of them is where
+      # per gate stops being the same statement.
+      - kind: file
+        assert: provenance_stamp_present
+        args: { skill: gate-quality }
+    owner: platform-engineering
+    deployed_by: gate-quality
+    variance: narrowing-only
+    baseline: null
+    review_by: 2027-08-16
+    rationale_adr: https://github.com/Eaiger-Ent/ee-standard/blob/main/docs/adr/0009-single-lint-definition.md
+
+  - id: TYP-001
+    title: Static type checking runs in strict mode and blocks
+    enforces: >
+      mypy (Python) or `tsc --strict` (TypeScript) runs over all first-party
+      source in CI with no per-file opt-out beyond the recorded baseline.
+    standard:
+      name: mypy command line — strict mode
+      url: https://mypy.readthedocs.io/en/stable/command_line.html
+    also_see:
+      - name: Python typing specification
+        url: https://typing.python.org/en/latest/spec/
+    tier: 1
+    rung: blocking
+    locus: [pre-commit, ci]
+    applies_to: [python, typescript]
+    verify:
+      - kind: file
+        assert: typecheck-strict-and-blocking
+        args: { role: typecheck }
+      - kind: file
+        assert: stack_tool_pinned_in_lockfile
+        args: { role: typecheck }
+      - kind: file
+        assert: provenance_stamp_present
+        args: { skill: gate-quality }
+    owner: platform-engineering
+    deployed_by: gate-quality
+    variance: narrowing-only
+    baseline: null
+    review_by: 2027-08-16
+    rationale_adr: https://github.com/Eaiger-Ent/ee-standard/blob/main/docs/adr/0010-strict-typing-from-birth.md
+
+  - id: TST-001
+    title: A failing test fails the build
+    enforces: >
+      The test command runs in CI, its exit code is the job's verdict, and no
+      step in the chain swallows a non-zero status.
+    standard:
+      name: NIST SP 800-218 (SSDF) PW.8
+      url: https://csrc.nist.gov/pubs/sp/800/218/final
+    also_see:
+      - name: The Practical Test Pyramid
+        url: https://martinfowler.com/articles/practical-test-pyramid.html
+    tier: 1
+    rung: blocking
+    locus: [ci]
+    applies_to: [always]
+    verify:
+      - kind: file
+        assert: tests-run-and-block
+      - kind: file
+        assert: no-failure-suppression
+      - kind: file
+        assert: provenance_stamp_present
+        args: { skill: gate-quality }
+    owner: platform-engineering
+    deployed_by: gate-quality
+    variance: forbidden
+    baseline: null
+    review_by: 2027-08-16
+    rationale_adr: https://github.com/Eaiger-Ent/ee-standard/blob/main/docs/adr/0011-test-failures-are-terminal.md
+
+  # --- Infrastructure ------------------------------------------------------
+
+  - id: IAC-001
+    title: Infrastructure code is statically analysed before apply
+    enforces: >
+      checkov and tflint run over all Terraform/OpenTofu in CI, and their exit
+      codes block the merge.
+    standard:
+      name: Checkov
+      url: https://www.checkov.io/1.Welcome/What%20is%20Checkov.html
+    also_see:
+      - name: tflint
+        url: https://github.com/terraform-linters/tflint
+      - name: CIS Google Cloud Platform Benchmark
+        url: https://www.cisecurity.org/benchmark/google_cloud_computing_platform
+    tier: 1
+    rung: blocking
+    locus: [pre-commit, ci]
+    applies_to: [terraform]
+    verify:
+      - kind: command
+        run: checkov --directory . --compact --quiet
+      - kind: command
+        run: tflint --recursive
+      # Two loci were declared from Phase 0 and neither was read: the blocks
+      # above run the analysers over the files, which is a different claim from
+      # something enforcing them before a commit lands and before a merge does.
+      # The last of the four controls the contract-14 survey listed (SUP-003,
+      # BLD-001, DEV-001, IAC-001), and the same move as the other three.
+      #
+      # One hook covers both analysers, because the hook runs the control and
+      # the control runs both. A repository with Terraform still has to pin
+      # `checkov` and `tflint` in its own `tools:` — an absent analyser is
+      # UNCLASSIFIED (ADR 0016) rather than a pass, and this register pins
+      # neither because this repository has no `*.tf` to analyse.
+      - kind: file
+        assert: gate_wired_at_declared_loci
+        args: { tool: register-check }
+      - kind: file
+        assert: provenance_stamp_present
+        args: { skill: gate-iac }
+    owner: platform-engineering
+    deployed_by: gate-iac
+    variance: narrowing-only
+    baseline: null
+    review_by: 2027-08-16
+    rationale_adr: https://github.com/Eaiger-Ent/ee-standard/blob/main/docs/adr/0012-iac-static-analysis.md
+
+  # --- Documentation -------------------------------------------------------
+
+  - id: DOC-001
+    title: Markdown conforms to one shared, pinned rule set
+    enforces: >
+      markdownlint-cli2 runs from a single configuration wired at editor,
+      pre-commit and CI loci. Prose lines are capped at 250 characters
+      (code blocks and tables exempt), matching the lint-md deployed
+      config; narrowing-only variance permits tightening below 250 in a
+      repo but never loosening above it.
+    standard:
+      name: markdownlint-cli2
+      url: https://github.com/DavidAnson/markdownlint-cli2
+    tier: 1
+    rung: blocking
+    locus: [editor, pre-commit, ci]
+    applies_to: [always]
+    deployed_by: lint-md
+    verify:
+      - kind: command
+        # Not `npx`: it falls through to PATH (§ H6). An absent local install is
+        # now `tool not installed — cannot verify` (UNCLASSIFIED, ADR 0016)
+        # rather than a pass earned by a global nobody pinned.
+        run: node_modules/.bin/markdownlint-cli2 "**/*.md"
+      - kind: file
+        # The ceiling, the tool name and the editor extension id are register
+        # facts (ADR 0018): a repository may reasonably tighten the ceiling or
+        # name a different editor without the checker changing. What the assert
+        # holds is the shape — the ceiling may narrow but never widen, and all
+        # three declared loci must be wired.
+        assert: markdown_gate_wired_at_all_loci
+        args:
+          max_line_length: 250
+          tool: markdownlint-cli2
+          editor_extension: DavidAnson.vscode-markdownlint
+    owner: platform-engineering
+    variance: narrowing-only
+    baseline: null
+    review_by: 2027-08-16
+    rationale_adr: https://github.com/Eaiger-Ent/ee-standard/blob/main/docs/adr/0013-one-markdown-rule-set.md
+
+# ---------------------------------------------------------------------------
+# Meta-controls. These do not check the code — they check the register and its
+# enforcement. Without them the register can rot silently: a control can be
+# declared blocking and be unreachable, a baseline can grow, an expiry can pass.
+# ---------------------------------------------------------------------------
+meta_controls:
+
+  - id: GOV-001
+    title: Every blocking control is reachable from a CI step that can fail
+    enforces: >
+      For each control with `rung: blocking` and `ci` in its locus, a CI step
+      exists that invokes its verification and is not marked continue-on-error.
+    rationale: >
+      A control declared blocking but unreachable is worse than no control —
+      it reports safety that does not exist. This is theme T-3 from the
+      predecessor retrospective.
+    verify:
+      - kind: command
+        run: register-check meta GOV-001
+        # The `partial:` this block carried from contract 3 is gone at contract
+        # 26, because the thing it declared unverified is now read. Two
+        # questions hid inside "is it required", and contract 19 separated
+        # them: whether the *repository* says the job is required, which the
+        # recorded ruleset answers from a file, and whether *GitHub* enforces
+        # that ruleset, which no file can answer. GOV-001 now asks the platform
+        # the second one and fails a required check GitHub does not enforce —
+        # a recorded ruleset nobody was told about protects nothing.
+        #
+        # Removing a partial is not the same act as satisfying it, so it is
+        # worth saying which happened: the property is verified, not waived.
+        # Without a token the meta-control reports SKIPPED (no credentials) and
+        # says what it did verify, which still denies the run a `0` (ADR 0016).
+
+  - id: GOV-002
+    title: No baseline grew
+    enforces: >
+      Every baseline artefact has the same or fewer entries than at the
+      previous commit on the default branch.
+    rationale: >
+      The baseline's size is the burndown metric. A baseline that may grow is
+      an exemption list, not a migration.
+    verify:
+      - kind: command
+        run: register-check meta GOV-002
+
+  - id: GOV-003
+    title: No control is past its review date
+    enforces: >
+      No control in this register has a `review_by` earlier than today.
+    rationale: >
+      An unreviewed control drifts from the standard it claims to enforce.
+      Expiry forces the re-decision rather than letting silence stand in
+      for agreement.
+    verify:
+      - kind: command
+        run: register-check meta GOV-003

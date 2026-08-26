@@ -1,0 +1,12 @@
+# SEC-001 depends on these two lines. `fetch-secrets.sh` writes real credentials
+# here on every container start, and a commit that carries them is the failure
+# the whole secrets gate exists to prevent — one that no scanner can undo once
+# it reaches a remote.
+#
+# Keep this file in the copy you make. From register contract 18 deleting it
+# fails SEC-001 — `secret_files_are_gitignored` reads the rule and requires
+# that git tracks the file carrying it, so a rule in `.git/info/exclude` or an
+# uncommitted copy is not accepted either. Before that it failed nothing, and
+# failed quietly, later, in someone else's clone.
+.env
+.env.docker

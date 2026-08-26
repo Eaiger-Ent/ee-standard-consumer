@@ -1,0 +1,100 @@
+{
+  // The control-register devcontainer template. Copy this directory to
+  // `.devcontainer/` in a new repository, substitute every double-brace
+  // placeholder, delete the README that came with the copy, and run
+  // `/gate-build` to pin what you chose and stamp it. README.md gives the
+  // command that lists the placeholders still to substitute.
+  //
+  // That command is spelled out there and not here on purpose: a file that
+  // quotes the placeholder pattern in its own comments matches that pattern
+  // for ever, so the check can never come back clean while it lives in a file
+  // the check reads. Phase 4 hit exactly that — a fully substituted copy still
+  // listed this file.
+  //
+  // This file chooses nothing on your behalf beyond the base image, and pins
+  // everything it does choose. `project-init` decides which image and which
+  // features a project needs; `gate-build` insists that whichever were chosen
+  // are pinned; this template is what exists before either has run.
+  "name": "ee-standard-consumer Dev Environment",
+
+  // DEV-001 — pinned by digest, not by floating tag. No lock file covers
+  // images, so this is the one pin that must live inline.
+  //
+  // mcr.microsoft.com/devcontainers/base:trixie, resolved from the registry on
+  // 2026-08-21. Bumps arrive as pull requests via SUP-002's `devcontainers`
+  // ecosystem — a pin nothing updates rots at a known version, which is a
+  // different failure from an unpinned one and not a better one.
+  "image": "mcr.microsoft.com/devcontainers/base:trixie@sha256:025b74bb5f7ac53edd77e01aa7188c359aab100e23a2f6220bde50bbb9fd31dd",
+
+  // Language toolchains are added **when a language is actually introduced**,
+  // not in anticipation. The register's predicates already model this: a repo
+  // with no `*.tf` skips IAC-001, and by the same logic it has no business
+  // installing OpenTofu. `github-cli` is here because every repository needs it
+  // and nothing in this file is a language choice.
+  //
+  // Features are pinned by devcontainer-lock.json, regenerated with:
+  //   devcontainer upgrade --workspace-folder .
+  //
+  // A lock file covering *some* features reads as solved and is not — DEV-001
+  // fails one, and this project's own Phase 0.5 exit criterion was re-opened
+  // over exactly that.
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+
+    // Not a language choice either, and not optional. The published route into
+    // this standard is `/register-adopt`, a Claude Code skill, so a container
+    // that cannot run Claude Code cannot adopt the register from inside itself.
+    // `check-auth.sh` has always probed for `claude`; until Phase 4 built this
+    // template nothing installed it, and the remedy it printed — re-run
+    // setup.sh — could never work.
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {},
+
+    // Node is here as Claude Code's runtime, not as a language choice — the
+    // rule above still holds. The claude-code feature declares node a *soft*
+    // dependency, so the CLI drops it from the install order rather than
+    // pulling it in, and the feature's own apt fallback cannot find a
+    // `nodejs`/`npm` pair on trixie. The build fails at that point with
+    // "Node.js and npm are required but could not be installed". Naming node
+    // here is what makes the soft dependency a hard one.
+    "ghcr.io/devcontainers/features/node:2": {}
+  },
+
+  // Secrets are fetched on the host and never committed. Both generated files
+  // are gitignored by the `.gitignore` in this directory, and from register
+  // contract 18 SEC-001 reads that rule rather than taking its word for it.
+  "initializeCommand": "bash .devcontainer/fetch-secrets.sh",
+
+  // The `.docker` copy, not the `.env` itself. `--env-file` does no shell
+  // parsing, so it would read a quoted value's quotes as part of the value; the
+  // `.env` is sourced as shell, where the quotes are required. One fetch writes
+  // the first and derives the second, so there is one thing to keep correct.
+  "runArgs": ["--env-file", ".devcontainer/.env.docker"],
+
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": "bash .devcontainer/check-auth.sh",
+
+  // BLD-001 — the container's final user is not root. Stated rather than
+  // inherited: a devcontainer naming neither `containerUser` nor `remoteUser`
+  // runs as whatever its base image uses, which may be root today and may
+  // become root on any digest bump. Non-root by luck is not the property.
+  "remoteUser": "vscode",
+
+  // Credential state survives a rebuild. Without this, every rebuild is
+  // followed by a re-authentication ritual, and rituals get skipped.
+  "mounts": [
+    "source=ee-standard-consumer-claude-home,target=/home/vscode/.claude,type=volume"
+  ],
+
+  "customizations": {
+    "vscode": {
+      // Left empty on purpose. The editor locus belongs to the controls that
+      // declare one, and `gate-quality` writes the extension its register names
+      // — one list, not two. An extension added here by hand is a second
+      // statement of what the editor enforces.
+      "extensions": [],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "zsh"
+      }
+    }
+  }
+}
