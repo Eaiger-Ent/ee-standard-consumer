@@ -26,7 +26,12 @@ jobs:
     # environment whose branch policy is the guard, because that policy is in
     # repository settings rather than in this file, and a guard written in the
     # file a pull request is editing is not a guard.
-    environment: conformance
+    # Only on the default branch. A pull_request run's ref is
+    # refs/pull/N/merge, which no branch policy naming the default branch can
+    # match — GitHub then refuses the job outright, in about a second, with
+    # "not allowed to deploy ... due to environment protection rules". An empty
+    # string means no environment, which is what a pull request gets.
+    environment: ${{ github.event_name == 'push' && 'conformance' || '' }}
     steps:
       - name: Check out the repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
