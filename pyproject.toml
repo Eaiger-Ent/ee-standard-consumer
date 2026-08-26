@@ -9,3 +9,38 @@ dependencies = []
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "register-check",
+    "ruff>=0.16.4",
+]
+
+[tool.uv.sources]
+register-check = { git = "https://github.com/Eaiger-Ent/ee-standard", rev = "v0.5.0" }
+
+# ee-control: LNT-001  ee-skill: gate-quality@0.1.0  register: v0.24.0  register-contract: 30
+#
+# An empty section is a real configuration: ruff's own defaults, stated in the
+# first place the register's `stacks.python.gates.lint.config` lists, where a
+# reviewer can find them and a later commit can tighten them. The editor,
+# pre-commit and CI all read this one section — an editor with rules of its own
+# is the second copy this standard exists to prevent.
+[tool.ruff]
+
+# ee-control: TYP-001  ee-skill: gate-quality@0.1.0  register: v0.24.0  register-contract: 30
+#
+# `strict` is the register's `strict_key`. TYP-001 carries `baseline: null`, so
+# there is no tolerated list of errors and no per-file opt-out beyond it — an
+# override switching strictness off in a second place is strict mode not being
+# on.
+#
+# `files` is the register's `coverage_key`. It is an allow-list, which makes an
+# exclusion into an *absence*: a tracked module left out is silently unchecked
+# while the control claims all first-party source. Both roots holding tracked
+# *.py files are named here.
+[tool.mypy]
+strict = true
+files = ["src", "tests"]

@@ -1,0 +1,37 @@
+# ee-control: SUP-002  ee-skill: gate-supply-chain@0.1.0  register: v0.24.0  register-contract: 30
+#
+# The stamp is at the top of this file rather than at each entry, and this is
+# the one place a whole-file stamp is right: every line of it belongs to
+# SUP-002, unlike a `.pre-commit-config.yaml` shared by several controls.
+#
+# `github-actions` and `devcontainers` are not package ecosystems detected from
+# a manifest — they are repository features. Their proposals are what keep
+# SUP-003's SHA pins and DEV-001's digest pins current instead of fossilising:
+# a pin nothing updates rots at a known version, which is a different failure
+# from an unpinned one and not a better one.
+version: 2
+updates:
+  # `uv`, from the register's `ecosystems.python.dependabot` — the repository
+  # commits uv.lock, so this is the manager that can read it.
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+
+  # `npm`, from the register's `ecosystems.node.dependabot`. The repository
+  # gained package-lock.json when DOC-001 was wired by hand, and an ecosystem
+  # present with no update entry is a lockfile nothing proposes bumps for.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: devcontainers
+    directory: /
+    schedule:
+      interval: weekly

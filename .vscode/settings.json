@@ -1,0 +1,25 @@
+{
+  // ee-control: LNT-001  ee-skill: gate-quality@0.1.0  register: v0.24.0  register-contract: 30
+  //
+  // Which tool *holds* a gated file type, as opposed to which is installed.
+  // They are separate claims: an extension can be installed the whole time
+  // another one holds the file type, and LNT-001 would call that a pass.
+  //
+  // Workspace scope, and only workspace scope. The same binding written into
+  // devcontainer.json would land in the machine-scoped file a devcontainer
+  // feature's binding lands in, and compete on terms the containers.dev merge
+  // table declines to state. A tracked workspace file wins by documented rule
+  // instead — and the checker fails a repository that sets it in both places,
+  // agreement included, because agreeing today is luck rather than a rule.
+  //
+  // A missing binding is a violation, not a default: with nothing tracked
+  // saying anything, whichever feature ships a formatter decides.
+  //
+  // The language and the setting are the register's
+  // `stacks.python.gates.lint.editor_binding`; the value is that gate's
+  // `editor_extension`. Nothing here configures rules — the editor reads the
+  // same [tool.ruff] section pre-commit and CI read.
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff"
+  }
+}

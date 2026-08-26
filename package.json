@@ -1,0 +1,27 @@
+{
+  "name": "ee-standard-consumer",
+  "version": "1.0.0",
+  "description": "Consumer repository for the Equal Experts control register.",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Eaiger-Ent/ee-standard-consumer.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Eaiger-Ent/ee-standard-consumer/issues"
+  },
+  "homepage": "https://github.com/Eaiger-Ent/ee-standard-consumer#readme",
+  "devDependencies": {
+    "markdownlint-cli2": "^0.23.2"
+  },
+  "private": true
+}

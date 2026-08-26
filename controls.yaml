@@ -440,11 +440,13 @@ tools:
     pinned_at:
       - .devcontainer/setup.sh
       - .github/workflows/register-check.yml
-      # Not a gate, and still a locus: `support-floor.yml` installs uv to run
-      # the tests on the oldest interpreter `requires-python` claims. A site
-      # that installs a pinned tool is a site that can drift from the register,
-      # whether or not a verdict depends on it.
-      - .github/workflows/support-floor.yml
+      # `.github/workflows/support-floor.yml` was here and is removed: it is a
+      # workflow the authoring repository has and this one does not, and
+      # `tool_versions_match_register` compares exactly these paths — a path
+      # listed here that does not exist is a failure, which is the check
+      # working. This is the first of the edits docs/08-adopting.md § 3.7 says
+      # an adopter makes to their own register. Add a line here for any file of
+      # yours that repeats uv's version.
   # The interpreter every other Python tool runs inside, and until contract 20
   # the only tool here that no locus pinned and nothing compared. `source:
   # toolchain` is neither of the other two and both would be false: the value

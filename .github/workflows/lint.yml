@@ -1,0 +1,26 @@
+# DOC-001's ci locus. No provenance stamp: nothing deployed this — `lint-md` is
+# in a private marketplace this repository cannot reach, so DOC-001 is satisfied
+# by hand per docs/08-adopting.md § 3.
+#
+# The job id is `lint-md` because that is the string CI-001's `required_checks:`
+# names, and GitHub matches a required status check by the context a job
+# produces. Rename the job and the ruleset waits for a check nothing reports.
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-md:
+    runs-on: ubuntu-latest
+    steps:
+      # SUP-003 — third-party actions are pinned to a commit SHA.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Lint Markdown
+        # DOC-001 — the version comes from package-lock.json, the single
+        # authority, and the binary comes from the tree `npm ci` just wrote.
+        run: |
+          npm ci --no-audit --no-fund
+          node_modules/.bin/markdownlint-cli2 "**/*.md"

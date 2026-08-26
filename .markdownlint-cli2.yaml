@@ -1,0 +1,16 @@
+# .markdownlint-cli2.yaml
+#
+# The runner's configuration; the rule set lives in .markdownlint.yaml. No
+# provenance stamp, for the reason given there.
+#
+# markdownlint-cli2 resolves its globs against the filesystem rather than
+# against git, so without `gitignore: true` it lints every third-party README
+# under node_modules. That scopes the tool to what git does not ignore, which is
+# not an exemption.
+#
+# `ignores:` is empty and stays that way. Per ADR 0019 an exemption may scope a
+# gate to what git does not track and may never hide a file it does, and
+# `markdown_gate_wired_at_all_loci` fails any entry here that matches a tracked
+# file.
+gitignore: true
+ignores: []

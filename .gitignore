@@ -1,0 +1,12 @@
+# Node — installed from package-lock.json by `npm ci`, never committed.
+#
+# DOC-001 depends on this line. `.markdownlint-cli2.yaml` sets `gitignore: true`
+# so the linter is scoped to what git does not ignore, and that scoping is only
+# as good as this file: without it markdownlint-cli2 lints every third-party
+# README under node_modules and DOC-001 fails on somebody else's markdown.
+node_modules/
+
+# Python — the environment uv builds from uv.lock.
+.venv/
+__pycache__/
+*.py[cod]

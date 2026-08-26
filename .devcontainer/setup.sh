@@ -34,6 +34,21 @@ set -euo pipefail
 # The named volume mounts root-owned on first create.
 sudo chown -R vscode:vscode /home/vscode/.claude
 
+# **`claude update` must work, or the container is pinned to whatever the feature
+# shipped.** The claude-code feature runs `npm install -g` as root, so the
+# package tree it writes is root-owned while this container's user is vscode
+# (BLD-001) — and `claude update` then fails with "Insufficient permissions to
+# install update", on a release cadence of roughly one a day. Phase 4 met this
+# stuck at 2.1.241 mid-adoption.
+#
+# Hand vscode the one package the feature owns; the surrounding node_modules and
+# bin are already group-writable. The glob is a loop rather than a `chown` on
+# the pattern so that a container without the feature is a no-op rather than an
+# error.
+for d in /usr/local/share/nvm/versions/node/*/lib/node_modules/@anthropic-ai; do
+  [ -d "$d" ] && sudo chown -R vscode:vscode "$d"
+done
+
 # **Trust the workspace, or nothing here can read git.** On a macOS host the
 # workspace is a bind mount, and git inside the container refuses it —
 # "detected dubious ownership" — even though the directory and `.git` both stat
@@ -84,6 +99,13 @@ git config --global --add safe.directory "$PWD"
 # tarball with no checksum and no signature, so `devcontainer-lock.json` would
 # pin the installer and not the artefact — the measurement Phase 0.5 already
 # made for uv and gitleaks (docs/adr/0034-the-template-bootstraps-uv.md).
+# ee-control: SUP-001  ee-skill: gate-supply-chain@0.1.0  register: v0.24.0  register-contract: 30
+#
+# The stamp is at this block, never at the file. `.devcontainer/setup.sh`
+# belongs to gate-build; the package-manager install inside it is SUP-001's
+# locus, exactly as several gates write their own hooks into one
+# `.pre-commit-config.yaml`. The version below was already correct against the
+# register and was adopted rather than rewritten.
 uv_version=0.12.5
 case "$(uname -m)" in
   aarch64|arm64) uv_arch=aarch64 uv_sha=9bf43b4d1a07665bf64d4c4e710930b382321a785e0eb10aac07f46471f86a31 ;;
@@ -96,6 +118,33 @@ echo "${uv_sha}  /tmp/uv.tgz" | sha256sum -c --quiet -
 tar -xzf /tmp/uv.tgz -C /tmp --strip-components=1 "${uv_dir}/uv" "${uv_dir}/uvx"
 sudo install /tmp/uv /tmp/uvx /usr/local/bin/
 rm /tmp/uv.tgz /tmp/uv /tmp/uvx
+
+# ee-control: SEC-001  ee-skill: gate-secrets@0.1.0  register: v0.24.0  register-contract: 30
+#
+# gitleaks, from the pinned release, verified against the published sha256.
+# This is not a locus of SEC-001's own — the control declares pre-commit, ci and
+# remote, and a developer environment is none of them. It is where the
+# pre-commit locus's binary comes from, which is why the register lists this
+# file in `tools.gitleaks.pinned_at` and `tool_versions_match_register`
+# compares it against the CI install.
+#
+# The stamp is at this block, never at the file: `setup.sh` belongs to
+# gate-build, and gate-supply-chain's uv block sits above this one.
+#
+# The register pins **one** checksum, for x86_64 — the same single-architecture
+# gap the uv block above records. The aarch64 value comes from the same
+# release's published checksums file and is compared by nothing.
+gitleaks_version=8.30.1
+case "$(uname -m)" in
+  aarch64|arm64) gitleaks_arch=arm64 gitleaks_sha=e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080 ;;
+  *)             gitleaks_arch=x64   gitleaks_sha=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb ;;
+esac
+curl -sSfL -o /tmp/gitleaks.tgz \
+  "https://github.com/gitleaks/gitleaks/releases/download/v${gitleaks_version}/gitleaks_${gitleaks_version}_linux_${gitleaks_arch}.tar.gz"
+echo "${gitleaks_sha}  /tmp/gitleaks.tgz" | sha256sum -c --quiet -
+tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
+sudo install /tmp/gitleaks /usr/local/bin/gitleaks
+rm /tmp/gitleaks.tgz /tmp/gitleaks
 
 # Install from whichever lockfiles this repository commits. Each is guarded by
 # the lockfile's own presence rather than by a language guess: a repository is
@@ -124,15 +173,23 @@ fi
 # manager where a lockfile pins it, and only otherwise off `PATH`. An absent one
 # is reported rather than installed unpinned.
 if [ -f .pre-commit-config.yaml ]; then
-  if [ -f uv.lock ]; then
+  # Each arm asks whether the tool is *reachable that way* before using it, and
+  # never whether a lockfile merely exists. A repository can have `uv.lock` and
+  # no pre-commit in it — every repository does, between the gate that writes
+  # the config and the gate that adds the dependency — and `uv run pre-commit`
+  # then exits non-zero, which under `set -e` aborts container create. A
+  # devcontainer that fails to build because a hook is not installed yet is a
+  # worse failure than the missing hook.
+  if [ -f uv.lock ] && uv run pre-commit --version >/dev/null 2>&1; then
     uv run pre-commit install
-  elif [ -f poetry.lock ]; then
+  elif [ -f poetry.lock ] && poetry run pre-commit --version >/dev/null 2>&1; then
     poetry run pre-commit install
   elif command -v pre-commit >/dev/null 2>&1; then
     pre-commit install
   else
-    echo "note: .pre-commit-config.yaml exists and pre-commit is not installed." >&2
-    echo "      Add it to a lockfile this repository commits, or to a feature." >&2
+    echo "note: .pre-commit-config.yaml exists and pre-commit is not installed," >&2
+    echo "      so nothing runs at the pre-commit locus. Add it to a lockfile" >&2
+    echo "      this repository commits, then re-run this script." >&2
   fi
 fi
 

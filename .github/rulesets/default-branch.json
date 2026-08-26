@@ -1,0 +1,62 @@
+// This file is a record, not an enforcement. GitHub does not read a path in
+// this repository to decide what a ruleset says — only the API call does that.
+// A recorded ruleset the platform has never been told about protects nothing.
+//
+// The rules below are CI-001's `args:`, rendered into GitHub's own spelling.
+// `non_fast_forward` is the rule that *forbids* force-push, so the register's
+// `allow_force_push: false` is what puts it here — the register says what is
+// allowed and GitHub names what is blocked, and reading one as the other is
+// how a control ends up inverted.
+//
+// `~DEFAULT_BRANCH` rather than a branch name. A ruleset naming `main` stops
+// protecting the default branch the day the default moves, silently.
+{
+  // ee-control: CI-001  ee-skill: gate-repo@0.1.0  register: v0.24.0  register-contract: 30
+  "name": "default-branch",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "include": ["~DEFAULT_BRANCH"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {
+      "type": "pull_request",
+      // CI-001 requires a pull request. It does not require an approval on
+      // one, so the count is 0 rather than a number this gate picked — a gate
+      // that quietly demanded a reviewer would be enforcing something the
+      // register never says, and `variance: forbidden` cuts both ways.
+      "parameters": {
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": true,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": false,
+        "required_reviewers": [],
+        "dismissal_restriction": { "enabled": false, "allowed_actors": [] }
+      }
+    },
+    {
+      "type": "required_status_checks",
+      // CI-001's `required_checks`, one `{ "context": ... }` object per entry.
+      // Both are job ids of workflows that run on push or pull_request:
+      // `register-check` in register-check.yml, `lint-md` in lint.yml. Neither
+      // job suppresses its own failure. A rule of this type naming no context
+      // requires no check at all — the ruleset would be accepted, the control
+      // would report satisfied, and a pull request could merge with CI red.
+      "parameters": {
+        "required_status_checks": [
+          { "context": "register-check" },
+          { "context": "lint-md" }
+        ],
+        "strict_required_status_checks_policy": true,
+        "do_not_enforce_on_create": false
+      }
+    },
+    // No `parameters` here, and that is GitHub's schema rather than an
+    // omission — the API rejects a payload that supplies them for this type.
+    { "type": "non_fast_forward" }
+  ]
+}

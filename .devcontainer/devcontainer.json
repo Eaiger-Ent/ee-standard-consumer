@@ -17,6 +17,13 @@
   // are pinned; this template is what exists before either has run.
   "name": "ee-standard-consumer Dev Environment",
 
+  // ee-control: DEV-001  ee-skill: gate-build@0.1.0  register: v0.24.0  register-contract: 30
+  //
+  // Adopted, not chosen. This digest was already here — written by the
+  // control-register devcontainer template — and gate-build's job is to insist
+  // that whichever image was chosen is pinned, not to choose one. The stamp
+  // records a take-over rather than a deployment.
+  //
   // DEV-001 — pinned by digest, not by floating tag. No lock file covers
   // images, so this is the one pin that must live inline.
   //
@@ -73,6 +80,11 @@
   "postCreateCommand": "bash .devcontainer/setup.sh",
   "postStartCommand": "bash .devcontainer/check-auth.sh",
 
+  // ee-control: BLD-001  ee-skill: gate-build@0.1.0  register: v0.24.0  register-contract: 30
+  //
+  // Adopted, not chosen. `vscode` is the user the base image provides and was
+  // already stated here; gate-build stamped it rather than writing it.
+  //
   // BLD-001 — the container's final user is not root. Stated rather than
   // inherited: a devcontainer naming neither `containerUser` nor `remoteUser`
   // runs as whatever its base image uses, which may be root today and may
@@ -87,11 +99,16 @@
 
   "customizations": {
     "vscode": {
-      // Left empty on purpose. The editor locus belongs to the controls that
-      // declare one, and `gate-quality` writes the extension its register names
-      // — one list, not two. An extension added here by hand is a second
-      // statement of what the editor enforces.
-      "extensions": [],
+      // ee-control: LNT-001  ee-skill: gate-quality@0.1.0  register: v0.24.0  register-contract: 30
+      //
+      // The extension id is the register's
+      // `stacks.python.gates.lint.editor_extension`. Installing it is only half
+      // the claim — which extension *holds* python files is decided in
+      // `.vscode/settings.json`, at workspace scope, never here.
+      // `charliermarsh.ruff` is LNT-001's, written by gate-quality.
+      // `DavidAnson.vscode-markdownlint` is DOC-001's editor locus, added by
+      // hand — nothing deployed it, so it carries no stamp of its own.
+      "extensions": ["charliermarsh.ruff", "DavidAnson.vscode-markdownlint"],
       "settings": {
         "terminal.integrated.defaultProfile.linux": "zsh"
       }

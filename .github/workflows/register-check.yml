@@ -1,0 +1,98 @@
+# The gating workflow. Every control that declares a `ci` locus is enforced
+# from a job here, and this job runs on `push` and `pull_request` — a workflow
+# triggered only by `workflow_dispatch` runs when a human clicks it, and a
+# control reachable only that way is declared and unreachable.
+#
+# Step order is not cosmetic. The frozen install comes before every gate step,
+# because those steps run the tools it places; a gate step written above it
+# would check against nothing. Each gate owns and stamps only its own steps.
+
+name: register-check
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # The job id is the status-check context CI-001's `required_checks` names.
+  # A ruleset requiring a context no job produces waits for it forever, so the
+  # register's spelling governs the job's name rather than the other way round.
+  register-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          # The secret scanner reads commits, not the working tree. A shallow
+          # clone scans a fraction of them and reports success, which is the
+          # gate-in-name-only shape SEC-001 exists to prevent.
+          fetch-depth: 0
+
+      # The version is the register's `tools.uv.version`, written verbatim and
+      # on the step name so that the pin sits beside the tool it pins — the
+      # register records this file as one of uv's `pinned_at` loci, and what is
+      # compared there is a version adjacent to the tool's own name.
+      - name: Install uv 0.12.5
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: "0.12.5"
+
+      # ee-control: SUP-001  ee-skill: gate-supply-chain@0.1.0  register: v0.24.0  register-contract: 30
+      - name: Install dependencies (frozen)
+        run: uv sync --frozen
+
+      # ee-control: SEC-001  ee-skill: gate-secrets@0.1.0  register: v0.24.0  register-contract: 30
+      #
+      # The version and checksum are the register's `tools.gitleaks.version`
+      # and `.sha256`, written verbatim. The register records this file in that
+      # tool's `pinned_at`, and `tool_versions_match_register` fails the build
+      # when this site and the devcontainer's drift apart. The pin is spelled
+      # with the tool's own name beside it, because what is compared is a
+      # version adjacent to the tool name.
+      - name: Install gitleaks
+        run: |
+          # renovate: datasource=github-releases depName=gitleaks/gitleaks
+          GITLEAKS_VERSION=8.30.1
+          curl -sSfL -o gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tgz" | sha256sum -c -
+          tar -xzf gitleaks.tgz gitleaks
+          sudo install gitleaks /usr/local/bin/gitleaks
+          rm gitleaks gitleaks.tgz
+
+      - name: Secret scan
+        run: gitleaks detect --no-banner --redact
+
+      # ee-control: BLD-001  ee-skill: gate-build@0.1.0  register: v0.24.0  register-contract: 30
+      # ee-control: DEV-001  ee-skill: gate-build@0.1.0  register: v0.24.0  register-contract: 30
+      - name: Build and environment
+        run: uv run register-check run --control BLD-001 --control DEV-001
+
+      # ee-control: LNT-001  ee-skill: gate-quality@0.1.0  register: v0.24.0  register-contract: 30
+      - name: Lint (python)
+        run: uv run ruff check .
+
+      # ee-control: TYP-001  ee-skill: gate-quality@0.1.0  register: v0.24.0  register-contract: 30
+      #
+      # No path argument: mypy reads the roots `tool.mypy.files` names, so the
+      # coverage CI runs is the coverage the register reads back.
+      - name: Type check (python)
+        run: uv run mypy
+
+      # ee-control: TST-001  ee-skill: gate-quality@0.1.0  register: v0.24.0  register-contract: 30
+      #
+      # One of the spellings the register accepts for this ecosystem, run
+      # through uv so it reaches the pytest uv.lock pins rather than whatever
+      # is on PATH. Its exit code is the job's verdict; nothing wraps it.
+      - name: Tests
+        run: uv run pytest
+
+      # ee-control: SUP-003  ee-skill: gate-supply-chain@0.1.0  register: v0.24.0  register-contract: 30
+      #
+      # The ci half of SUP-003's two loci. No step in this job runs a full
+      # audit — every gate step names its controls — so this control needs a
+      # step of its own rather than being reached by one.
+      - name: Supply chain
+        run: uv run register-check run --control SUP-003

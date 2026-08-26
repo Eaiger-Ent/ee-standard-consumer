@@ -1,0 +1,22 @@
+# .markdownlint.yaml
+#
+# DOC-001's rule set. **No provenance stamp, deliberately.** A stamp names the
+# control *and the skill that deployed it*, and nothing deployed this: `lint-md`
+# lives in a private marketplace this repository cannot reach, so DOC-001 is
+# satisfied by hand per docs/08-adopting.md § 3. Writing `ee-skill: lint-md@…`
+# here would record a deployment that never happened. DOC-001 asks for no stamp,
+# so nothing is owed — its verify blocks are the tool itself and
+# `markdown_gate_wired_at_all_loci`.
+#
+# DOC-001 is `narrowing-only`: rules may be added or tightened here, never
+# removed or loosened. The MD013 ceiling must be at or under the register's 250.
+
+default: true
+MD013:
+  line_length: 250
+  code_blocks: false
+  tables: false
+MD024:
+  siblings_only: true
+MD050:
+  style: asterisk

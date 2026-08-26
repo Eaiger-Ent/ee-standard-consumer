@@ -1,0 +1,71 @@
+repos:
+  - repo: local
+    hooks:
+      # ee-control: BLD-001  ee-skill: gate-build@0.1.0  register: v0.24.0  register-contract: 30
+      # ee-control: DEV-001  ee-skill: gate-build@0.1.0  register: v0.24.0  register-contract: 30
+      - id: register-check-build
+        name: register-check (BLD-001, DEV-001)
+        entry: uv run register-check run --control BLD-001 --control DEV-001
+        language: system
+        pass_filenames: false
+        files: ^(Dockerfile|.*/Dockerfile|\.devcontainer/.*)$
+
+      # ee-control: LNT-001  ee-skill: gate-quality@0.1.0  register: v0.24.0  register-contract: 30
+      - id: ruff
+        name: ruff (python, LNT-001)
+        entry: uv run ruff check
+        language: system
+        # Derived from the register's `stacks.python.source_globs`, which is the
+        # set of tracked files this stack's gates are claimed to cover. A
+        # hand-picked pre-commit `types:` tag would be a second statement of
+        # that set, free to name fewer files than the control claims.
+        files: '^.*\.pyi?$'
+
+      # ee-control: TYP-001  ee-skill: gate-quality@0.1.0  register: v0.24.0  register-contract: 30
+      #
+      # `pass_filenames: false` is deliberate and is not a narrowing. mypy is
+      # given the roots its own coverage list names — `tool.mypy.files` — so
+      # that one list is both what runs here and what the checker reads back.
+      # Passing staged filenames would make the hook's coverage whatever a
+      # commit happened to touch, which is smaller than the control claims and
+      # invisible in review.
+      - id: mypy
+        name: mypy (python, TYP-001)
+        entry: uv run mypy
+        language: system
+        pass_filenames: false
+        files: '^.*\.pyi?$'
+
+      # ee-control: SEC-001  ee-skill: gate-secrets@0.1.0  register: v0.24.0  register-contract: 30
+      - id: gitleaks
+        name: gitleaks (SEC-001)
+        entry: gitleaks protect --staged --no-banner --redact
+        language: system
+        pass_filenames: false
+
+      # ee-control: SUP-003  ee-skill: gate-supply-chain@0.1.0  register: v0.24.0  register-contract: 30
+      #
+      # `--control SUP-003` rather than a full audit, so a failing hook names
+      # the control a developer has to fix rather than reporting the whole
+      # register at them. `files:` limits the hook to commits that touch a
+      # workflow — the only commits that can introduce an unpinned action.
+      - id: register-check-supply-chain
+        name: register-check (SUP-003)
+        entry: uv run register-check run --control SUP-003
+        language: system
+        pass_filenames: false
+        files: ^\.github/workflows/.*\.ya?ml$
+
+      # DOC-001's pre-commit locus. No provenance stamp: nothing deployed this
+      # — `lint-md` is in a private marketplace this repository cannot reach, so
+      # DOC-001 is satisfied by hand per docs/08-adopting.md § 3, and a stamp
+      # would record a deployment that never happened. DOC-001 asks for none.
+      #
+      # The entry is the lockfile's own binary, never `npx --no-install`, which
+      # falls through to PATH when the local install is missing and makes
+      # package-lock.json an authority in name only (ADR 0020).
+      - id: markdownlint-cli2
+        name: markdownlint-cli2 (DOC-001)
+        entry: node_modules/.bin/markdownlint-cli2
+        language: system
+        types: [markdown]
