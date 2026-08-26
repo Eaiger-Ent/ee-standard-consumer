@@ -107,11 +107,33 @@ jobs:
       - name: Supply chain
         run: uv run register-check run --control SUP-003
 
-      # docs/08-adopting.md § 4.3, first half. The flag comes later: turning on
-      # --require-complete before the credential answers fails every run on
-      # controls that hold, and a check that fails for reasons nobody can act on
-      # gets ignored.
+      # docs/08-adopting.md § 4.3. Two paths, because under ADR 0022's Option 3
+      # a pull request can never carry the credential: the environment's branch
+      # policy names the default branch, and a pull_request run's ref is
+      # refs/pull/N/merge, which that policy cannot match. Giving the policy a
+      # pattern that did match would hand the token to fork pull requests, which
+      # is the exfiltration path Option 3 exists to close.
+      #
+      # So the strict run is the one on the default branch, where the credential
+      # exists and every remote block can answer. A pull request runs the same
+      # audit with the job token, which cannot read security_and_analysis, and
+      # tolerates exit 3 — and **only** 3. A verified violation still fails it.
+      #
+      # Exit 3 is non-zero, so a bare `run:` fails on it whether or not
+      # --require-complete is passed. The tolerance has to be written out.
       - name: Conformance
         env:
           GITHUB_TOKEN: ${{ secrets.PLATFORM_READ_TOKEN || github.token }}
-        run: uv run register-check
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = "push" ]; then
+            uv run register-check --require-complete
+          else
+            uv run register-check && status=0 || status=$?
+            if [ "$status" -ne 0 ] && [ "$status" -ne 3 ]; then
+              exit "$status"
+            fi
+            echo "note: exit ${status} tolerated - a pull request carries no"
+            echo "      platform credential under ADR 0022 Option 3. The strict"
+            echo "      run is the one on the default branch."
+          fi
