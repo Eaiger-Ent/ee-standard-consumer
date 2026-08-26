@@ -31,7 +31,9 @@ jobs:
     # match — GitHub then refuses the job outright, in about a second, with
     # "not allowed to deploy ... due to environment protection rules". An empty
     # string means no environment, which is what a pull request gets.
-    environment: ${{ github.event_name == 'push' && 'conformance' || '' }}
+    environment: >-
+      ${{ github.ref == format('refs/heads/{0}',
+          github.event.repository.default_branch) && 'conformance' || '' }}
     steps:
       - name: Check out the repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -124,9 +126,15 @@ jobs:
       - name: Conformance
         env:
           GITHUB_TOKEN: ${{ secrets.PLATFORM_READ_TOKEN || github.token }}
-          EVENT: ${{ github.event_name }}
+          # The default branch, not the event: pushing a *branch* is a push
+          # too, and asking for the environment there is refused by the same
+          # policy that refuses a pull request. Read from the repository rather
+          # than typed, so renaming the default branch does not silently move
+          # which run is the strict one.
+          REF: ${{ github.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          if [ "$EVENT" = "push" ]; then
+          if [ "$REF" = "refs/heads/$DEFAULT_BRANCH" ]; then
             uv run register-check --require-complete
           else
             uv run register-check && status=0 || status=$?
