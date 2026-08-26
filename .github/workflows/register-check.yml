@@ -22,6 +22,11 @@ jobs:
   # register's spelling governs the job's name rather than the other way round.
   register-check:
     runs-on: ubuntu-latest
+    # docs/08-adopting.md § 4.3 — the credential lives behind a deployment
+    # environment whose branch policy is the guard, because that policy is in
+    # repository settings rather than in this file, and a guard written in the
+    # file a pull request is editing is not a guard.
+    environment: conformance
     steps:
       - name: Check out the repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -96,3 +101,12 @@ jobs:
       # step of its own rather than being reached by one.
       - name: Supply chain
         run: uv run register-check run --control SUP-003
+
+      # docs/08-adopting.md § 4.3, first half. The flag comes later: turning on
+      # --require-complete before the credential answers fails every run on
+      # controls that hold, and a check that fails for reasons nobody can act on
+      # gets ignored.
+      - name: Conformance
+        env:
+          GITHUB_TOKEN: ${{ secrets.PLATFORM_READ_TOKEN || github.token }}
+        run: uv run register-check
