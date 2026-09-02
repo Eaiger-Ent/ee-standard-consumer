@@ -16,7 +16,7 @@ dev = [
     "pre-commit>=4.6.2",
     "pytest>=9.1.1",
     "register-check",
-    "ruff>=0.16.4",
+    "ruff>=0.16.5",
 ]
 
 [tool.uv.sources]
